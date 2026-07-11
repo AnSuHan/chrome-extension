@@ -53,13 +53,34 @@ async function saveCurrentGroup() {
   });
 }
 
-/** Open a saved group's tabs in a fresh Chrome tab group (in `windowId`). */
+// Local placeholder page a restored tab points at until the user opens it.
+const LAZY_PAGE = chrome.runtime.getURL("src/lazy/lazy.html");
+
+/** Build the lazy-placeholder URL that carries the real url + title. */
+function lazyUrl(tab) {
+  const q = new URLSearchParams({ u: tab.url ?? "", t: tab.title ?? "" });
+  return `${LAZY_PAGE}?${q.toString()}`;
+}
+
+/**
+ * Open a saved group's tabs in a fresh Chrome tab group (in `windowId`).
+ *
+ * Tabs open onto a tiny LOCAL placeholder page instead of their real URL, so a
+ * big group appears instantly with zero network load. Each tab navigates to its
+ * real URL only when the user actually views it (see src/lazy/lazy.js). This is
+ * how Chrome's own session restore stays fast, and it sidesteps chrome.tabs.
+ * discard entirely (which was fragile on freshly-created tabs).
+ */
 async function openGroupTabs(group, windowId) {
-  const created = [];
-  for (const tab of group.tabs) {
-    const t = await chrome.tabs.create({ url: tab.url, active: false, windowId });
-    created.push(t.id);
-  }
+  // Fire every create at once; requests dispatch in array order so tabs still
+  // land in order, and each create is cheap (a local page, no network).
+  const created = await Promise.all(
+    group.tabs.map((tab) =>
+      chrome.tabs
+        .create({ url: lazyUrl(tab), active: false, windowId })
+        .then((t) => t.id),
+    ),
+  );
 
   // Bundle the freshly opened tabs into a native Chrome tab group.
   const groupId = await chrome.tabs.group({ tabIds: created });
@@ -67,6 +88,7 @@ async function openGroupTabs(group, windowId) {
     title: group.name,
     color: group.color,
   });
+
   return { groupId, created };
 }
 
@@ -100,18 +122,25 @@ async function switchToGroup(id, windowId) {
 
   const existing = await chrome.tabs.query({ windowId });
 
-  // 1) Snapshot the window's current tabs so the switch never loses them.
+  // 1) Snapshot the window's current tabs so the switch never loses them —
+  //    concurrently with opening the new group (the two don't depend on each
+  //    other), so the storage write doesn't add to the perceived latency.
   const savable = existing.filter(isSavable);
-  if (savable.length) {
-    const stamp = new Date().toLocaleString();
-    await addGroup({ name: `Backup — ${stamp}`, tabs: savable });
-  }
+  const backup = savable.length
+    ? addGroup({ name: `Backup — ${new Date().toLocaleString()}`, tabs: savable })
+    : Promise.resolve();
 
-  // 2) Open the saved group in this window.
-  const { groupId, created } = await openGroupTabs(group, windowId);
+  // 2) Open the saved group in this window (instant local placeholders).
+  const [, { groupId, created }] = await Promise.all([
+    backup,
+    openGroupTabs(group, windowId),
+  ]);
+
+  // 3) Activate the first tab (its placeholder then loads the real page), then
+  //    close the old tabs. With the new tabs not loading, closing the old ones
+  //    no longer competes for network/CPU. Activate first so removing the old
+  //    active tab doesn't make Chrome surface a different placeholder.
   if (created[0] != null) await chrome.tabs.update(created[0], { active: true });
-
-  // 3) Close the previously-open tabs so only the restored group remains.
   const oldIds = existing.map((t) => t.id).filter((tid) => tid != null);
   if (oldIds.length) await chrome.tabs.remove(oldIds);
 

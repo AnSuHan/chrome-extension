@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading…</title>
+    <!-- Neutral globe so the tab strip doesn't show the extension icon. -->
+    <link
+      id="fav"
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="lazy.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="globe" aria-hidden="true">🌐</div>
+      <div class="title" id="title">Saved tab</div>
+      <div class="host" id="host"></div>
+      <button class="load" id="load" type="button">Click to load</button>
+    </main>
+    <script src="lazy.js"></script>
+  </body>
+</html>

@@ -111,6 +111,21 @@ function cssUrl(url) {
   return url.replace(/["\\]/g, "\\$&").replace(/\r?\n/g, "");
 }
 
+// Tabs a restored group opened sit on our lazy placeholder until visited; show
+// their real destination (carried in the ?u= param) rather than the ext URL.
+const LAZY_PAGE = chrome.runtime.getURL("src/lazy/lazy.html");
+function realUrlOf(tab) {
+  const u = tab.url ?? "";
+  if (u.startsWith(LAZY_PAGE)) {
+    try {
+      return new URL(u).searchParams.get("u") || u;
+    } catch {
+      return u;
+    }
+  }
+  return u;
+}
+
 // Globe drawn under every favicon; shows through when the favicon is missing
 // or fails to load (a broken favicon layer renders transparent). Kept in sync
 // with the `.otab-fav` default background in sidepanel.css.
@@ -136,14 +151,15 @@ function buildOpenTab(tab) {
     fav.style.backgroundImage = `url("${cssUrl(tab.favIconUrl)}"), ${GLOBE_FALLBACK}`;
   }
 
+  const url = realUrlOf(tab);
   const meta = document.createElement("span");
   meta.className = "otab-meta";
   const title = document.createElement("span");
   title.className = "otab-title";
-  title.textContent = tab.title || hostOf(tab.url ?? "") || "New tab";
+  title.textContent = tab.title || hostOf(url) || "New tab";
   const host = document.createElement("span");
   host.className = "otab-host";
-  host.textContent = hostOf(tab.url ?? "");
+  host.textContent = hostOf(url);
   meta.append(title, host);
 
   const close = document.createElement("button");
@@ -493,7 +509,22 @@ function buildGroup(group) {
     toast(`Switching to "${group.name}"…`);
   });
 
-  head.append(caret, dot, name, count, restore);
+  // Delete the whole group straight from the header — no need to expand it.
+  const del = document.createElement("span");
+  del.className = "g-del";
+  del.textContent = "×";
+  del.setAttribute("role", "button");
+  del.title = "Delete group";
+  del.setAttribute("aria-label", `Delete group "${group.name}"`);
+  del.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    expanded.delete(group.id);
+    await removeGroup(group.id);
+    toast(`Deleted "${group.name}".`);
+    reload();
+  });
+
+  head.append(caret, dot, name, count, restore, del);
   head.addEventListener("click", () => {
     if (expanded.has(group.id)) expanded.delete(group.id);
     else expanded.add(group.id);
