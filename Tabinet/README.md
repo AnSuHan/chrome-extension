@@ -5,25 +5,43 @@ manager for Chrome (Manifest V3).
 
 ## What it does
 
-**Popup** (quick actions):
+Two surfaces: a **docked side panel** for everyday use, and a **full-page editor**
+for detailed changes.
+
+**Side panel** — the Safari-style sidebar. **Click the toolbar icon to dock it**
+on the side of the browser; the page you're browsing stays usable on the other
+side.
 
 - **Save window** — snapshots every http(s) tab in the current window as a
   named, colored group.
 - **Save group** — snapshots only the tabs in the active tab's Chrome tab group,
   keeping its name and color.
-- **Restore** — click a saved group to reopen all its tabs, bundled into a native
-  Chrome tab group with the saved name and color.
-- **Rename** (✎) / **Delete** (×) — manage saved groups inline.
+- **New group** (`+`) — create an empty group to fill.
+- **Browse & open** — each saved group expands to show its tabs. **Click a tab to
+  open it** in the current window; **Open all** reopens the whole group bundled
+  into a native Chrome tab group with its name and color.
+- **Edit tabs right in the list**:
+  - **+ Add current tab** — append the page you're on to a group.
+  - **×** — delete a tab.
+  - **drag ⋮⋮** — reorder tabs within a group, or drop onto another group's
+    header to **move** the tab there.
+- **✎** (top-right) opens the full editor (rename, recolor, JSON, sync). The
+  panel updates live as groups change (saves, edits, sync from another device).
 
-**Manage page** (full editor — open via *Manage / edit…* or the extension's
+**Editor** — a two-pane editor (open via the panel's ✎ or the extension's
 Options):
 
-- **Create** empty groups; **rename** and **recolor** them.
-- **Reorder groups** by dragging the ⠿ handle.
-- **Edit the tabs inside a group** — change each tab's title and URL, drag ⋮⋮ to
-  reorder, remove a tab (×), or **+ Add tab**.
-- **Save JSON / Load JSON** — export all groups to a `.json` file, and load one
-  back in either **Merge** (append) or **Replace all** mode.
+- **Left sidebar** — the list of all groups. Click to select, **+ New group** to
+  create, drag the ⠿ handle to **reorder**, hover for delete (×). The colored dot
+  and count mirror each group.
+- **Right pane** — the selected group's tabs:
+  - **Edit** each tab's title and URL inline; **↗** opens it in a new tab.
+  - **Reorder** tabs by dragging the ⋮⋮ handle.
+  - **Move a tab to another group** by dragging it onto that group in the sidebar.
+  - **+ Add tab** appends a new blank tab; **×** removes one.
+  - Rename / recolor / **Restore** / delete the group from the header.
+- **Save JSON / Load JSON** (sidebar footer) — export all groups to a `.json`
+  file, and load one back in either **Merge** (append) or **Replace all** mode.
 - **Sync across devices** — toggle to move storage from this device to your
   Google account so groups appear on every Chrome you're signed into.
 
@@ -48,49 +66,52 @@ large or long-term backups, prefer **Save JSON**.
 
 ```
 Tabinet/
-├── manifest.json              # MV3 manifest (permissions, popup, worker)
+├── manifest.json              # MV3 manifest (side_panel, options_page, worker)
 ├── README.md
 ├── icons/                     # icon16/48/128.png
 └── src/
     ├── background/
-    │   └── service-worker.js  # save / restore / remove tab operations
+    │   └── service-worker.js  # opens the side panel; save/restore tab operations
     ├── lib/
     │   └── storage.js         # sharded persistence (local/sync) + edit/reorder/import
-    ├── manager/
-    │   ├── manager.html       # full-page group editor (options_page)
-    │   ├── manager.css        # editor styles (light + dark)
-    │   └── manager.js         # create / rename / recolor / reorder / edit tabs / JSON
-    └── popup/
-        ├── popup.html         # popup markup
-        ├── popup.css          # popup styles (light + dark)
-        └── popup.js           # popup UI controller (thin; delegates to worker)
+    ├── sidepanel/
+    │   ├── sidepanel.html     # docked sidebar (default surface)
+    │   ├── sidepanel.css      # sidebar styles (light + dark)
+    │   └── sidepanel.js       # browse groups, open tabs, quick save
+    └── manager/
+        ├── manager.html       # full-page two-pane editor (options_page)
+        ├── manager.css        # editor styles (light + dark)
+        └── manager.js         # create / rename / recolor / reorder / edit / move / JSON
 ```
 
 ## Load it in Chrome (development)
 
+Requires Chrome 114+ (Side Panel API).
+
 1. Open `chrome://extensions`.
 2. Toggle **Developer mode** (top-right).
 3. Click **Load unpacked** and select the `Tabinet/` folder.
-4. Pin the Tabinet icon and open the popup.
+4. Pin the Tabinet icon. **Click it to open the docked side panel.**
 
 ## Permissions
 
 | Permission  | Why |
 |-------------|-----|
-| `tabs`      | Read the current window's tabs and create tabs on restore. |
+| `tabs`      | Read the current window's tabs and open/create tabs. |
 | `tabGroups` | Read/bundle tabs into a named, colored Chrome tab group. |
 | `storage`   | Persist saved groups (local and, if enabled, sync). |
 | `downloads` | Write the JSON file when you Save your groups. |
+| `sidePanel` | Show the docked sidebar and open it from the toolbar icon. |
 
 ## Roadmap
 
-- [x] Rename saved groups from the popup
 - [x] Save the *current* Chrome tab group (not just the whole window)
 - [x] Export / import groups as JSON files (Merge / Replace)
 - [x] Create empty groups; recolor groups
-- [x] Drag-to-reorder groups
+- [x] Drag-to-reorder groups; move tabs between groups
 - [x] Edit tabs within a group (title/url/order/add/remove)
 - [x] Optional sync via `chrome.storage.sync`
+- [x] Docked side panel: browse groups & open tabs in the live window
 
 ## Monorepo note
 

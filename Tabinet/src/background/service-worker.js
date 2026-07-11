@@ -1,8 +1,9 @@
 /**
  * Tabinet — background service worker (Manifest V3, module).
  *
- * Owns the tab-capture and tab-restore operations so the popup stays thin.
- * The popup talks to the worker via chrome.runtime.sendMessage.
+ * Owns the tab-capture and tab-restore operations so the UI stays thin.
+ * The side panel / editor talk to the worker via chrome.runtime.sendMessage.
+ * Also wires the toolbar icon to open the docked side panel.
  */
 
 import {
@@ -12,6 +13,15 @@ import {
   removeGroup,
   renameGroup,
 } from "../lib/storage.js";
+
+// Clicking the toolbar icon opens Tabinet's side panel (Safari-style sidebar).
+function enableSidePanelOnAction() {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((e) => console.error("Tabinet setPanelBehavior:", e));
+}
+enableSidePanelOnAction();
+chrome.runtime.onInstalled.addListener(enableSidePanelOnAction);
 
 const isSavable = (t) => t.url && /^https?:/.test(t.url);
 

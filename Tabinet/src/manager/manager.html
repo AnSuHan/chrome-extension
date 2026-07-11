@@ -7,46 +7,50 @@
     <link rel="stylesheet" href="manager.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <img class="brand-icon" src="../../icons/icon48.png" alt="" />
-        <div>
-          <h1 class="title">Tabinet</h1>
-          <p class="subtitle">Manage your tab groups</p>
+    <div class="app">
+      <!-- ===== left: group list (Safari-style sidebar) ===== -->
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <div class="brand">
+            <img class="brand-icon" src="../../icons/icon48.png" alt="" />
+            <h1 class="title">Tabinet</h1>
+          </div>
+          <button id="new-group-btn" class="btn primary block" type="button">
+            + New group
+          </button>
         </div>
-      </div>
-      <div class="toolbar">
-        <button id="new-group-btn" class="btn primary" type="button">
-          + New group
-        </button>
-        <span class="sep"></span>
-        <label class="sync-toggle" title="Sync groups to your Google account so they appear on every device you're signed into (small storage limit — see README).">
-          <input id="sync-toggle" type="checkbox" />
-          Sync across devices
-        </label>
-        <span class="sep"></span>
-        <label class="import-mode">
-          On import:
-          <select id="import-mode">
-            <option value="merge">Merge</option>
-            <option value="replace">Replace all</option>
-          </select>
-        </label>
-        <button id="import-btn" class="btn" type="button">Load JSON…</button>
-        <button id="export-btn" class="btn" type="button">Save JSON</button>
-        <input id="import-file" type="file" accept="application/json" hidden />
-      </div>
-    </header>
+
+        <ul id="group-list" class="group-list" aria-label="Tab groups">
+          <!-- rendered by manager.js -->
+        </ul>
+
+        <div class="sidebar-foot">
+          <label
+            class="sync-toggle"
+            title="Sync groups to your Google account so they appear on every device you're signed into (small storage limit — see README)."
+          >
+            <input id="sync-toggle" type="checkbox" />
+            Sync across devices
+          </label>
+          <div class="io-row">
+            <select id="import-mode" title="How Load JSON applies the file">
+              <option value="merge">Merge</option>
+              <option value="replace">Replace all</option>
+            </select>
+            <button id="import-btn" class="btn small" type="button">Load</button>
+            <button id="export-btn" class="btn small" type="button">Save</button>
+            <input id="import-file" type="file" accept="application/json" hidden />
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== right: selected group's tabs ===== -->
+      <main id="detail" class="detail">
+        <!-- rendered by manager.js -->
+      </main>
+    </div>
 
     <p id="toast" class="toast" role="status" hidden></p>
-
-    <main id="groups" class="groups">
-      <!-- rendered by manager.js -->
-    </main>
-    <p id="empty" class="empty" hidden>
-      No groups yet. Create one with <strong>+ New group</strong>, or load a JSON
-      backup.
-    </p>
 
     <script type="module" src="manager.js"></script>
   </body>

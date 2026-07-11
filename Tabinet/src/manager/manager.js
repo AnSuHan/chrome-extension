@@ -1,12 +1,14 @@
 /**
- * Tabinet — group manager (full page).
+ * Tabinet — group manager (Safari-style two-pane layout).
  *
- * A management surface for saved groups: create, rename, recolor, reorder
- * (drag), edit the individual tabs inside a group (title/url/order/add/remove),
- * restore, delete, and Save/Load everything as a JSON file.
+ * Left sidebar  : the list of saved groups (select, create, rename, recolor,
+ *                 delete, drag-to-reorder, and drop target for moving tabs).
+ * Right detail  : the selected group's tabs — edit title/url, open, reorder by
+ *                 drag, delete, add. Drag a tab onto a sidebar group to move it
+ *                 into that group.
  *
- * Storage is manipulated directly through the shared storage layer; only tab
- * restoration is delegated to the service worker (it needs the tabs API flow).
+ * Storage is manipulated through the shared storage layer; only tab restoration
+ * is delegated to the service worker (it drives the tabs API).
  */
 
 import {
@@ -32,27 +34,103 @@ const CHROME_COLORS = [
   "orange",
 ];
 
-const groupsEl = document.getElementById("groups");
-const emptyEl = document.getElementById("empty");
+const COLOR_HEX = {
+  grey: "#9ca3af",
+  blue: "#3b82f6",
+  red: "#ef4444",
+  yellow: "#eab308",
+  green: "#22c55e",
+  pink: "#ec4899",
+  purple: "#a855f7",
+  cyan: "#06b6d4",
+  orange: "#f97316",
+};
+
+const listEl = document.getElementById("group-list");
+const detailEl = document.getElementById("detail");
 const toastEl = document.getElementById("toast");
 
-let state = []; // local mirror of saved groups, in order
+let state = []; // groups, in order
+let selectedId = null;
+
+const byId = (id) => state.find((g) => g.id === id);
+const selectedGroup = () => byId(selectedId);
 
 let toastTimer;
 function toast(msg) {
   toastEl.textContent = msg;
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (toastEl.hidden = true), 2500);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), 2400);
 }
 
-/* ------------------------------------------------------------------ *
- * Rendering
- * ------------------------------------------------------------------ */
+/* ================================================================== *
+ * Rendering — sidebar
+ * ================================================================== */
 
-function countLabel(n) {
-  return `${n} tab${n === 1 ? "" : "s"}`;
+function countText(n) {
+  return `${n}`;
 }
+
+function buildGroupItem(group) {
+  const li = document.createElement("li");
+  li.className = "group-item" + (group.id === selectedId ? " selected" : "");
+  li.dataset.id = group.id;
+
+  const handle = document.createElement("span");
+  handle.className = "g-handle";
+  handle.textContent = "⠿";
+  handle.title = "Drag to reorder";
+  handle.addEventListener("mousedown", () => (li.draggable = true));
+  handle.addEventListener("click", (e) => e.stopPropagation());
+  li.addEventListener("dragend", () => (li.draggable = false));
+
+  const dot = document.createElement("span");
+  dot.className = "g-dot";
+  dot.style.background = COLOR_HEX[group.color] ?? COLOR_HEX.grey;
+
+  const name = document.createElement("span");
+  name.className = "g-name";
+  name.textContent = group.name;
+
+  const count = document.createElement("span");
+  count.className = "g-count";
+  count.textContent = countText(group.tabs.length);
+
+  const del = document.createElement("button");
+  del.className = "g-del";
+  del.type = "button";
+  del.textContent = "×";
+  del.title = "Delete group";
+  del.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await removeGroup(group.id);
+    state = state.filter((g) => g.id !== group.id);
+    if (selectedId === group.id) selectedId = state[0]?.id ?? null;
+    render();
+  });
+
+  li.addEventListener("click", () => selectGroup(group.id));
+
+  li.append(handle, dot, name, count, del);
+  return li;
+}
+
+function renderSidebar() {
+  listEl.innerHTML = "";
+  if (state.length === 0) {
+    const p = document.createElement("li");
+    p.className = "sidebar-empty";
+    p.textContent = "No groups yet. Create one above.";
+    listEl.append(p);
+    return;
+  }
+  for (const group of state) listEl.append(buildGroupItem(group));
+}
+
+/* ================================================================== *
+ * Rendering — detail
+ * ================================================================== */
 
 function buildTabRow(group, tab, index) {
   const li = document.createElement("li");
@@ -62,9 +140,13 @@ function buildTabRow(group, tab, index) {
   const handle = document.createElement("span");
   handle.className = "tab-drag";
   handle.textContent = "⋮⋮";
-  handle.title = "Drag to reorder";
+  handle.title = "Drag to reorder, or onto a group to move";
   handle.addEventListener("mousedown", () => (li.draggable = true));
   li.addEventListener("dragend", () => (li.draggable = false));
+
+  const idx = document.createElement("span");
+  idx.className = "tab-index";
+  idx.textContent = String(index + 1);
 
   const fields = document.createElement("div");
   fields.className = "tab-fields";
@@ -85,9 +167,18 @@ function buildTabRow(group, tab, index) {
   url.addEventListener("change", () => {
     tab.url = url.value;
     persistTabs(group);
+    open.href = url.value || "#";
   });
 
   fields.append(title, url);
+
+  const open = document.createElement("a");
+  open.className = "tab-open";
+  open.textContent = "↗";
+  open.title = "Open in a new tab";
+  open.target = "_blank";
+  open.rel = "noreferrer";
+  open.href = tab.url || "#";
 
   const remove = document.createElement("button");
   remove.className = "tab-remove";
@@ -100,25 +191,33 @@ function buildTabRow(group, tab, index) {
     render();
   });
 
-  li.append(handle, fields, remove);
+  li.append(handle, idx, fields, open, remove);
   return li;
 }
 
-function buildGroupCard(group) {
-  const card = document.createElement("section");
-  card.className = "group";
-  card.dataset.id = group.id;
+function renderDetail() {
+  detailEl.innerHTML = "";
+  const group = selectedGroup();
 
-  // --- head ---
+  if (!group) {
+    const box = document.createElement("div");
+    box.className = "detail-empty";
+    box.innerHTML =
+      state.length === 0
+        ? `<div class="big">📁</div><div class="t">No groups yet</div>
+           <div>Create a group on the left to start adding tabs.</div>`
+        : `<div class="big">👈</div><div class="t">Select a group</div>
+           <div>Pick a group on the left to view and edit its tabs.</div>`;
+    detailEl.append(box);
+    return;
+  }
+
+  const inner = document.createElement("div");
+  inner.className = "detail-inner";
+
+  // --- header ---
   const head = document.createElement("div");
-  head.className = "group-head";
-
-  const handle = document.createElement("span");
-  handle.className = "drag-handle";
-  handle.textContent = "⠿";
-  handle.title = "Drag to reorder groups";
-  handle.addEventListener("mousedown", () => (card.draggable = true));
-  card.addEventListener("dragend", () => (card.draggable = false));
+  head.className = "detail-head";
 
   const color = document.createElement("select");
   color.className = "color-select";
@@ -133,6 +232,7 @@ function buildGroupCard(group) {
   color.addEventListener("change", async () => {
     group.color = color.value;
     await updateGroup(group.id, { color: color.value });
+    renderSidebar();
   });
 
   const name = document.createElement("input");
@@ -143,17 +243,14 @@ function buildGroupCard(group) {
     group.name = name.value.trim() || group.name;
     name.value = group.name;
     await updateGroup(group.id, { name: group.name });
+    renderSidebar();
   });
-
-  const count = document.createElement("span");
-  count.className = "count";
-  count.textContent = countLabel(group.tabs.length);
 
   const actions = document.createElement("div");
   actions.className = "head-actions";
 
   const restore = document.createElement("button");
-  restore.className = "icon-btn";
+  restore.className = "icon-btn primary";
   restore.type = "button";
   restore.textContent = "Restore";
   restore.disabled = group.tabs.length === 0;
@@ -169,21 +266,26 @@ function buildGroupCard(group) {
   del.addEventListener("click", async () => {
     await removeGroup(group.id);
     state = state.filter((g) => g.id !== group.id);
+    selectedId = state[0]?.id ?? null;
     render();
   });
 
   actions.append(restore, del);
-  head.append(handle, color, name, count, actions);
+  head.append(color, name, actions);
+  inner.append(head);
 
   // --- tabs ---
-  const list = document.createElement("ul");
-  list.className = "tabs";
-  group.tabs.forEach((tab, i) => list.append(buildTabRow(group, tab, i)));
-  wireSortable(list, ".tab-row", (from, to) => {
-    const [moved] = group.tabs.splice(from, 1);
-    group.tabs.splice(to, 0, moved);
-    persistTabs(group).then(render);
-  });
+  if (group.tabs.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "tabs-empty";
+    empty.textContent = "No tabs in this group yet. Add one below.";
+    inner.append(empty);
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "tab-list";
+    group.tabs.forEach((tab, i) => ul.append(buildTabRow(group, tab, i)));
+    inner.append(ul);
+  }
 
   const addTab = document.createElement("button");
   addTab.className = "add-tab";
@@ -193,34 +295,200 @@ function buildGroupCard(group) {
     group.tabs.push({ title: "", url: "" });
     await persistTabs(group);
     render();
+    // focus the newly added row's title field
+    const inputs = detailEl.querySelectorAll(".tab-title");
+    inputs[inputs.length - 1]?.focus();
   });
+  inner.append(addTab);
 
-  card.append(head, list, addTab);
-  return card;
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "Tip: drag ⋮⋮ to reorder tabs, or drag a tab onto a group on the left to move it there.";
+  inner.append(hint);
+
+  detailEl.append(inner);
 }
 
 function render() {
-  groupsEl.innerHTML = "";
-  emptyEl.hidden = state.length > 0;
-  for (const group of state) groupsEl.append(buildGroupCard(group));
+  renderSidebar();
+  renderDetail();
 }
 
-/* ------------------------------------------------------------------ *
- * Persistence helpers
- * ------------------------------------------------------------------ */
+/* ================================================================== *
+ * Actions
+ * ================================================================== */
 
 function persistTabs(group) {
   return updateGroup(group.id, { tabs: group.tabs });
 }
 
-async function reload() {
-  state = await getGroups();
+function selectGroup(id) {
+  selectedId = id;
   render();
 }
 
-/* ------------------------------------------------------------------ *
- * Sync toggle (local <-> chrome.storage.sync)
- * ------------------------------------------------------------------ */
+async function reload() {
+  state = await getGroups();
+  if (!state.some((g) => g.id === selectedId)) {
+    selectedId = state[0]?.id ?? null;
+  }
+  render();
+}
+
+async function moveTabToGroup(fromId, index, toId) {
+  if (fromId === toId) return;
+  const from = byId(fromId);
+  const to = byId(toId);
+  if (!from || !to) return;
+  const [tab] = from.tabs.splice(index, 1);
+  if (!tab) return;
+  to.tabs.push(tab);
+  await persistTabs(from);
+  await persistTabs(to);
+  toast(`Moved tab to "${to.name}".`);
+  render();
+}
+
+async function reorderGroupTo(draggedId, targetId, after) {
+  const from = state.findIndex((g) => g.id === draggedId);
+  let to = state.findIndex((g) => g.id === targetId);
+  if (from < 0 || to < 0) return;
+  if (after) to += 1;
+  if (from < to) to -= 1;
+  if (from === to) return;
+  const [g] = state.splice(from, 1);
+  state.splice(to, 0, g);
+  await reorderGroups(state.map((x) => x.id));
+  renderSidebar();
+}
+
+async function reorderTabTo(fromIndex, targetIndex, after) {
+  const group = selectedGroup();
+  if (!group) return;
+  let to = targetIndex;
+  if (after) to += 1;
+  if (fromIndex < to) to -= 1;
+  if (fromIndex === to) return;
+  const [t] = group.tabs.splice(fromIndex, 1);
+  group.tabs.splice(to, 0, t);
+  await persistTabs(group);
+  renderDetail();
+}
+
+/* ================================================================== *
+ * Drag & drop
+ * ================================================================== */
+
+let drag = null; // { kind: 'group'|'tab', id?, groupId?, index?, el }
+
+function clearMarks() {
+  for (const el of document.querySelectorAll(
+    ".drop-before, .drop-after, .drop-into",
+  )) {
+    el.classList.remove("drop-before", "drop-after", "drop-into");
+  }
+}
+
+function isAfter(e, el) {
+  const r = el.getBoundingClientRect();
+  return e.clientY > r.top + r.height / 2;
+}
+
+// --- sidebar: reorder groups + accept tab drops (move) ---
+listEl.addEventListener("dragstart", (e) => {
+  const item = e.target.closest(".group-item");
+  if (!item || item.parentElement !== listEl) return;
+  drag = { kind: "group", id: item.dataset.id, el: item };
+  item.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+});
+
+listEl.addEventListener("dragover", (e) => {
+  if (!drag) return;
+  e.preventDefault();
+  clearMarks();
+  const item = e.target.closest(".group-item");
+  if (!item) return;
+  if (drag.kind === "group") {
+    if (item.dataset.id === drag.id) return;
+    item.classList.add(isAfter(e, item) ? "drop-after" : "drop-before");
+  } else if (drag.kind === "tab") {
+    if (item.dataset.id === drag.groupId) return; // same group = no-op
+    item.classList.add("drop-into");
+  }
+});
+
+listEl.addEventListener("drop", (e) => {
+  if (!drag) return;
+  e.preventDefault();
+  const item = e.target.closest(".group-item");
+  if (item) {
+    if (drag.kind === "group" && item.dataset.id !== drag.id) {
+      reorderGroupTo(drag.id, item.dataset.id, isAfter(e, item));
+    } else if (drag.kind === "tab") {
+      moveTabToGroup(drag.groupId, drag.index, item.dataset.id);
+    }
+  }
+  cleanupDrag();
+});
+
+// --- detail: reorder tabs within the selected group ---
+detailEl.addEventListener("dragstart", (e) => {
+  const row = e.target.closest(".tab-row");
+  if (!row) return;
+  drag = {
+    kind: "tab",
+    groupId: selectedId,
+    index: Number(row.dataset.index),
+    el: row,
+  };
+  row.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+});
+
+detailEl.addEventListener("dragover", (e) => {
+  if (drag?.kind !== "tab") return;
+  e.preventDefault();
+  clearMarks();
+  const row = e.target.closest(".tab-row");
+  if (!row || row === drag.el) return;
+  row.classList.add(isAfter(e, row) ? "drop-after" : "drop-before");
+});
+
+detailEl.addEventListener("drop", (e) => {
+  if (drag?.kind !== "tab") return;
+  e.preventDefault();
+  const row = e.target.closest(".tab-row");
+  if (row && row !== drag.el) {
+    reorderTabTo(drag.index, Number(row.dataset.index), isAfter(e, row));
+  }
+  cleanupDrag();
+});
+
+document.addEventListener("dragend", cleanupDrag);
+
+function cleanupDrag() {
+  clearMarks();
+  if (drag?.el) {
+    drag.el.classList.remove("dragging");
+    drag.el.draggable = false;
+  }
+  drag = null;
+}
+
+/* ================================================================== *
+ * Toolbar: new group, sync toggle, JSON save/load
+ * ================================================================== */
+
+document.getElementById("new-group-btn").addEventListener("click", async () => {
+  const g = await addEmptyGroup({ name: "New group" });
+  await reload();
+  selectGroup(g.id);
+  detailEl.querySelector(".name-input")?.focus();
+});
 
 const syncToggle = document.getElementById("sync-toggle");
 
@@ -240,7 +508,6 @@ syncToggle.addEventListener("change", async () => {
         : "Sync disabled — groups now stored on this device only.",
     );
   } catch (err) {
-    // Most likely sync quota exceeded; revert the checkbox.
     syncToggle.checked = target !== "sync";
     toast(
       target === "sync"
@@ -251,86 +518,6 @@ syncToggle.addEventListener("change", async () => {
   } finally {
     syncToggle.disabled = false;
   }
-});
-
-/* ------------------------------------------------------------------ *
- * Drag-and-drop sorting (shared by group cards and tab rows)
- * ------------------------------------------------------------------ */
-
-function clearMarks(container, selector) {
-  for (const el of container.querySelectorAll(selector)) {
-    el.classList.remove("drop-before", "drop-after");
-  }
-}
-
-/**
- * Wire HTML5 drag-sorting on `container`'s direct `selector` children.
- * Calls onMove(fromIndex, toIndex) with array indices after a valid drop.
- */
-function wireSortable(container, selector, onMove) {
-  let dragEl = null;
-
-  container.addEventListener("dragstart", (e) => {
-    const item = e.target.closest(selector);
-    if (!item || item.parentElement !== container) return;
-    dragEl = item;
-    item.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", "");
-  });
-
-  container.addEventListener("dragover", (e) => {
-    if (!dragEl) return;
-    e.preventDefault();
-    clearMarks(container, selector);
-    const item = e.target.closest(selector);
-    if (!item || item === dragEl || item.parentElement !== container) return;
-    const rect = item.getBoundingClientRect();
-    const after = e.clientY > rect.top + rect.height / 2;
-    item.classList.add(after ? "drop-after" : "drop-before");
-  });
-
-  container.addEventListener("drop", (e) => {
-    if (!dragEl) return;
-    e.preventDefault();
-    const item = e.target.closest(selector);
-    if (item && item !== dragEl && item.parentElement === container) {
-      const items = [...container.querySelectorAll(`:scope > ${selector}`)];
-      const from = items.indexOf(dragEl);
-      const targetIdx = items.indexOf(item);
-      const rect = item.getBoundingClientRect();
-      const after = e.clientY > rect.top + rect.height / 2;
-      let to = after ? targetIdx + 1 : targetIdx;
-      if (from < to) to -= 1;
-      if (from !== to) onMove(from, to);
-    }
-    cleanup();
-  });
-
-  container.addEventListener("dragend", cleanup);
-
-  function cleanup() {
-    clearMarks(container, selector);
-    if (dragEl) dragEl.classList.remove("dragging");
-    dragEl = null;
-  }
-}
-
-// Group-card reordering lives on the groups container (stable across renders).
-wireSortable(groupsEl, ".group", async (from, to) => {
-  const [moved] = state.splice(from, 1);
-  state.splice(to, 0, moved);
-  await reorderGroups(state.map((g) => g.id));
-  render();
-});
-
-/* ------------------------------------------------------------------ *
- * Toolbar: new group, export/import JSON
- * ------------------------------------------------------------------ */
-
-document.getElementById("new-group-btn").addEventListener("click", async () => {
-  await addEmptyGroup({ name: "New group" });
-  await reload();
 });
 
 document.getElementById("export-btn").addEventListener("click", async () => {
