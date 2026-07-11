@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tabinet</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <img class="brand-icon" src="../../icons/icon48.png" alt="" />
+      <div class="brand-text">
+        <h1 class="logo">Tabinet</h1>
+        <p class="tagline">Group · save · restore tabs</p>
+      </div>
+    </header>
+
+    <div class="actions">
+      <button id="save-window-btn" class="btn btn--primary" type="button">
+        <span class="btn-icon">&#9633;</span> Save window
+      </button>
+      <button
+        id="save-group-btn"
+        class="btn"
+        type="button"
+        title="Save the tab group the active tab belongs to"
+      >
+        <span class="btn-icon">&#9707;</span> Save group
+      </button>
+    </div>
+
+    <p id="toast" class="toast" role="status" hidden></p>
+
+    <main>
+      <ul id="group-list" class="group-list">
+        <!-- rendered by popup.js -->
+      </ul>
+      <div id="empty" class="empty" hidden>
+        <div class="empty-icon">&#128194;</div>
+        <p class="empty-title">No saved groups yet</p>
+        <p class="empty-sub">
+          Save the current window or tab group to get started.
+        </p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <button id="manage-btn" class="link-btn link-btn--strong" type="button">
+        &#9881; Manage / edit
+      </button>
+      <span class="footer-spacer"></span>
+      <button id="export-btn" class="link-btn" type="button">Save JSON</button>
+      <button id="import-btn" class="link-btn" type="button">Load JSON</button>
+      <input id="import-file" type="file" accept="application/json" hidden />
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

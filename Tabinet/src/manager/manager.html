@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tabinet — Manage groups</title>
+    <link rel="stylesheet" href="manager.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="../../icons/icon48.png" alt="" />
+        <div>
+          <h1 class="title">Tabinet</h1>
+          <p class="subtitle">Manage your tab groups</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="new-group-btn" class="btn primary" type="button">
+          + New group
+        </button>
+        <span class="sep"></span>
+        <label class="sync-toggle" title="Sync groups to your Google account so they appear on every device you're signed into (small storage limit — see README).">
+          <input id="sync-toggle" type="checkbox" />
+          Sync across devices
+        </label>
+        <span class="sep"></span>
+        <label class="import-mode">
+          On import:
+          <select id="import-mode">
+            <option value="merge">Merge</option>
+            <option value="replace">Replace all</option>
+          </select>
+        </label>
+        <button id="import-btn" class="btn" type="button">Load JSON…</button>
+        <button id="export-btn" class="btn" type="button">Save JSON</button>
+        <input id="import-file" type="file" accept="application/json" hidden />
+      </div>
+    </header>
+
+    <p id="toast" class="toast" role="status" hidden></p>
+
+    <main id="groups" class="groups">
+      <!-- rendered by manager.js -->
+    </main>
+    <p id="empty" class="empty" hidden>
+      No groups yet. Create one with <strong>+ New group</strong>, or load a JSON
+      backup.
+    </p>
+
+    <script type="module" src="manager.js"></script>
+  </body>
+</html>
