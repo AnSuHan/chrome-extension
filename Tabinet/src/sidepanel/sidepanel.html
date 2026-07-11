@@ -18,34 +18,62 @@
       </button>
     </header>
 
-    <div class="actions">
-      <button id="save-window-btn" class="btn btn--primary" type="button">
-        <span class="ic">&#9633;</span> Save window
-      </button>
-      <button
-        id="save-group-btn"
-        class="btn"
-        type="button"
-        title="Save the tab group the active tab belongs to"
-      >
-        <span class="ic">&#9707;</span> Save group
-      </button>
-    </div>
-
     <p id="toast" class="toast" role="status" hidden></p>
 
     <main class="scroll">
-      <ul id="group-list" class="group-list">
-        <!-- rendered by sidepanel.js -->
-      </ul>
-      <div id="empty" class="empty" hidden>
-        <div class="empty-icon">&#128194;</div>
-        <p class="empty-title">No saved groups yet</p>
-        <p class="empty-sub">
-          Save the current window or tab group to get started.
-        </p>
-      </div>
+      <!-- Live tabs of the current window (Safari-style sidebar) -->
+      <section class="section" id="open-section">
+        <div class="section-head">
+          <span class="section-label">Open tabs</span>
+          <span id="open-count" class="section-count">0</span>
+          <button id="new-tab-btn" class="icon-ghost icon-ghost--sm" type="button" title="New tab">
+            &#43;
+          </button>
+        </div>
+        <ul id="open-list" class="open-list">
+          <!-- rendered by sidepanel.js -->
+        </ul>
+      </section>
+
+      <!-- Saved tab groups -->
+      <section class="section" id="saved-section">
+        <div class="section-head">
+          <span class="section-label">Saved groups</span>
+        </div>
+
+        <div class="actions">
+          <button id="save-window-btn" class="btn btn--primary" type="button">
+            <span class="ic">&#9633;</span> Save window
+          </button>
+          <button
+            id="save-group-btn"
+            class="btn"
+            type="button"
+            title="Save the tab group the active tab belongs to"
+          >
+            <span class="ic">&#9707;</span> Save group
+          </button>
+        </div>
+
+        <ul id="group-list" class="group-list">
+          <!-- rendered by sidepanel.js -->
+        </ul>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-icon">&#128194;</div>
+          <p class="empty-title">No saved groups yet</p>
+          <p class="empty-sub">
+            Save the current window or tab group to get started.
+          </p>
+        </div>
+      </section>
     </main>
+
+    <!-- Right-click menu for the open-tabs list -->
+    <div id="ctx-menu" class="ctx-menu" hidden>
+      <button class="ctx-item" type="button" data-act="new">New tab</button>
+      <button class="ctx-item" type="button" data-act="duplicate">Duplicate tab</button>
+      <button class="ctx-item ctx-item--danger" type="button" data-act="close">Close tab</button>
+    </div>
 
     <script type="module" src="sidepanel.js"></script>
   </body>

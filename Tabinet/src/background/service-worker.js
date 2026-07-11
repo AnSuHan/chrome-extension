@@ -53,15 +53,11 @@ async function saveCurrentGroup() {
   });
 }
 
-/** Open every tab of a saved group in a fresh Chrome tab group. */
-async function restoreGroup(id) {
-  const groups = await getGroups();
-  const group = groups.find((g) => g.id === id);
-  if (!group || group.tabs.length === 0) return;
-
+/** Open a saved group's tabs in a fresh Chrome tab group (in `windowId`). */
+async function openGroupTabs(group, windowId) {
   const created = [];
   for (const tab of group.tabs) {
-    const t = await chrome.tabs.create({ url: tab.url, active: false });
+    const t = await chrome.tabs.create({ url: tab.url, active: false, windowId });
     created.push(t.id);
   }
 
@@ -71,6 +67,54 @@ async function restoreGroup(id) {
     title: group.name,
     color: group.color,
   });
+  return { groupId, created };
+}
+
+/** Open every tab of a saved group in a fresh Chrome tab group. */
+async function restoreGroup(id) {
+  const groups = await getGroups();
+  const group = groups.find((g) => g.id === id);
+  if (!group || group.tabs.length === 0) return;
+  const { groupId } = await openGroupTabs(group);
+  return groupId;
+}
+
+/**
+ * Switch a window to a saved group (Safari-style workspace switch):
+ *  1. back up the window's current tabs into a new saved group,
+ *  2. open the saved group's tabs in a fresh native tab group,
+ *  3. close the previously-open tabs so only the restored group remains.
+ */
+async function switchToGroup(id, windowId) {
+  const groups = await getGroups();
+  const group = groups.find((g) => g.id === id);
+  if (!group || group.tabs.length === 0) return;
+
+  // Resolve the target window. Never proceed with an unknown window id — a
+  // query without one spans every window and would wipe unrelated tabs.
+  if (windowId == null) {
+    const w = await chrome.windows.getCurrent().catch(() => null);
+    windowId = w?.id;
+  }
+  if (windowId == null) return restoreGroup(id); // can't scope safely
+
+  const existing = await chrome.tabs.query({ windowId });
+
+  // 1) Snapshot the window's current tabs so the switch never loses them.
+  const savable = existing.filter(isSavable);
+  if (savable.length) {
+    const stamp = new Date().toLocaleString();
+    await addGroup({ name: `Backup — ${stamp}`, tabs: savable });
+  }
+
+  // 2) Open the saved group in this window.
+  const { groupId, created } = await openGroupTabs(group, windowId);
+  if (created[0] != null) await chrome.tabs.update(created[0], { active: true });
+
+  // 3) Close the previously-open tabs so only the restored group remains.
+  const oldIds = existing.map((t) => t.id).filter((tid) => tid != null);
+  if (oldIds.length) await chrome.tabs.remove(oldIds);
+
   return groupId;
 }
 
@@ -90,7 +134,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       }
       case "RESTORE_GROUP":
-        await restoreGroup(msg.id);
+        // The sidebar's "Open all" switches workspace (backup + close old);
+        // other callers (editor) keep the additive restore.
+        if (msg.switch) await switchToGroup(msg.id, msg.windowId);
+        else await restoreGroup(msg.id);
         sendResponse({ ok: true });
         break;
       case "REMOVE_GROUP":

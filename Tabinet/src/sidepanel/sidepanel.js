@@ -1,14 +1,20 @@
 /**
  * Tabinet — side panel (the docked, Safari-style sidebar).
  *
- * Shows saved groups, expandable to reveal their tabs. From here you can:
- *  - open a tab in the current window (click it),
+ * Top section — live open tabs of this window:
+ *  - click a tab to switch to it,
+ *  - right-click for a menu (new tab / duplicate / close),
+ *  - drag a tab to reorder the real browser tabs,
+ *  - the list mirrors the window in real time via chrome.tabs events.
+ *
+ * Bottom section — saved groups:
+ *  - open a saved tab in the current window (click it),
  *  - add the current page to a group, delete a tab, reorder tabs (drag),
  *  - move a tab to another group (drag it onto that group's header),
  *  - quick-save the window / active tab group, and create empty groups.
  *
- * Reads come from the storage layer (respects the local/sync setting); tab
- * capture/restore is delegated to the service worker.
+ * Saved-group reads come from the storage layer (respects the local/sync
+ * setting); tab capture/restore is delegated to the service worker.
  */
 
 import {
@@ -37,6 +43,14 @@ const saveWindowBtn = document.getElementById("save-window-btn");
 const saveGroupBtn = document.getElementById("save-group-btn");
 const newGroupBtn = document.getElementById("new-group-btn");
 const editorBtn = document.getElementById("editor-btn");
+const openListEl = document.getElementById("open-list");
+const openCountEl = document.getElementById("open-count");
+const newTabBtn = document.getElementById("new-tab-btn");
+const ctxMenu = document.getElementById("ctx-menu");
+
+// The window that hosts this side panel. Resolved once; all live-tab queries
+// and events are scoped to it so the sidebar always mirrors its own window.
+let panelWindowId = chrome.windows.WINDOW_ID_NONE;
 
 const expanded = new Set(); // ids of groups shown expanded
 let cache = []; // last-rendered groups
@@ -61,6 +75,267 @@ function hostOf(url) {
   } catch {
     return url;
   }
+}
+
+/* ================================================================== *
+ * Live open tabs (Safari-style sidebar)
+ *
+ * Mirrors the current window's tabs: click to switch, right-click to
+ * create / duplicate / close, drag to reorder the real browser tabs.
+ * ================================================================== */
+
+// Resolve the tabs of the window that hosts this side panel. `currentWindow`
+// works in most cases; if it comes back empty we fall back to the explicit
+// window id from chrome.windows.getCurrent() so the list is never left blank.
+async function queryOpenTabs() {
+  let tabs = await chrome.tabs.query({ currentWindow: true });
+  if (!tabs.length) {
+    try {
+      const win = await chrome.windows.getCurrent();
+      if (win?.id != null) tabs = await chrome.tabs.query({ windowId: win.id });
+    } catch (e) {
+      console.error("Tabinet: window resolution failed", e);
+    }
+  }
+  return tabs;
+}
+
+function createTab() {
+  const opts = { active: true };
+  if (panelWindowId !== chrome.windows.WINDOW_ID_NONE) opts.windowId = panelWindowId;
+  chrome.tabs.create(opts);
+}
+
+// Sanitize a favicon URL for safe interpolation into a CSS url("…").
+function cssUrl(url) {
+  return url.replace(/["\\]/g, "\\$&").replace(/\r?\n/g, "");
+}
+
+// Globe drawn under every favicon; shows through when the favicon is missing
+// or fails to load (a broken favicon layer renders transparent). Kept in sync
+// with the `.otab-fav` default background in sidepanel.css.
+const GLOBE_FALLBACK =
+  'url("data:image/svg+xml;utf8,' +
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' " +
+  "stroke='%239aa1ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" +
+  "<circle cx='12' cy='12' r='9'/>" +
+  "<path d='M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18'/></svg>\")";
+
+function buildOpenTab(tab) {
+  const li = document.createElement("li");
+  li.className = "otab" + (tab.active ? " active" : "");
+  li.dataset.id = String(tab.id);
+  li.dataset.index = String(tab.index);
+  li.draggable = true;
+
+  const fav = document.createElement("span");
+  fav.className = "otab-fav";
+  // The favicon is layered over a globe fallback: if the favicon URL fails to
+  // load, the globe underneath simply shows through (no broken-image icon).
+  if (tab.favIconUrl) {
+    fav.style.backgroundImage = `url("${cssUrl(tab.favIconUrl)}"), ${GLOBE_FALLBACK}`;
+  }
+
+  const meta = document.createElement("span");
+  meta.className = "otab-meta";
+  const title = document.createElement("span");
+  title.className = "otab-title";
+  title.textContent = tab.title || hostOf(tab.url ?? "") || "New tab";
+  const host = document.createElement("span");
+  host.className = "otab-host";
+  host.textContent = hostOf(tab.url ?? "");
+  meta.append(title, host);
+
+  const close = document.createElement("button");
+  close.className = "otab-close";
+  close.type = "button";
+  close.textContent = "×";
+  close.title = "Close tab";
+  close.addEventListener("click", (e) => {
+    e.stopPropagation();
+    chrome.tabs.remove(tab.id);
+  });
+
+  li.append(fav, meta, close);
+
+  // Click anywhere on the row (but the close button) activates the tab.
+  li.addEventListener("click", () => activateTab(tab.id));
+  return li;
+}
+
+function activateTab(id) {
+  chrome.tabs.update(id, { active: true });
+  if (panelWindowId !== chrome.windows.WINDOW_ID_NONE) {
+    chrome.windows.update(panelWindowId, { focused: true });
+  }
+}
+
+let openRenderQueued = false;
+function scheduleOpenRender() {
+  if (openRenderQueued) return;
+  openRenderQueued = true;
+  // Coalesce the burst of events a single navigation/close can emit.
+  setTimeout(async () => {
+    openRenderQueued = false;
+    await renderOpenTabs();
+  }, 40);
+}
+
+async function renderOpenTabs() {
+  const tabs = await queryOpenTabs();
+  tabs.sort((a, b) => a.index - b.index);
+  // Remember this window so new tabs land here and events can be filtered.
+  if (tabs.length) panelWindowId = tabs[0].windowId;
+  openListEl.innerHTML = "";
+  if (!tabs.length) {
+    const li = document.createElement("li");
+    li.className = "otab-empty";
+    li.textContent = "No open tabs found.";
+    openListEl.append(li);
+  } else {
+    for (const tab of tabs) openListEl.append(buildOpenTab(tab));
+  }
+  openCountEl.textContent = String(tabs.length);
+}
+
+/* ---- drag to reorder the real browser tabs ---- */
+
+let openDrag = null; // { id, index, el }
+
+function clearOpenMarks() {
+  for (const el of openListEl.querySelectorAll(".drop-before, .drop-after")) {
+    el.classList.remove("drop-before", "drop-after");
+  }
+}
+
+openListEl.addEventListener("dragstart", (e) => {
+  const row = e.target.closest(".otab");
+  if (!row) return;
+  openDrag = {
+    id: Number(row.dataset.id),
+    index: Number(row.dataset.index),
+    el: row,
+  };
+  row.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+});
+
+openListEl.addEventListener("dragover", (e) => {
+  if (!openDrag) return;
+  const row = e.target.closest(".otab");
+  if (!row || row === openDrag.el) return;
+  e.preventDefault();
+  clearOpenMarks();
+  row.classList.add(isAfter(e, row) ? "drop-after" : "drop-before");
+});
+
+openListEl.addEventListener("drop", (e) => {
+  if (!openDrag) return;
+  const row = e.target.closest(".otab");
+  if (row && row !== openDrag.el) {
+    e.preventDefault();
+    const from = openDrag.index;
+    let to = Number(row.dataset.index);
+    if (isAfter(e, row)) to += 1;
+    if (from < to) to -= 1;
+    if (from !== to) chrome.tabs.move(openDrag.id, { index: to });
+  }
+  cleanupOpenDrag();
+});
+
+openListEl.addEventListener("dragend", cleanupOpenDrag);
+
+function cleanupOpenDrag() {
+  clearOpenMarks();
+  openDrag?.el?.classList.remove("dragging");
+  openDrag = null;
+}
+
+/* ---- right-click context menu ---- */
+
+let ctxTargetId = null; // tab id the menu was opened on (null = empty area)
+
+function showCtxMenu(x, y, tabId) {
+  ctxTargetId = tabId;
+  ctxMenu.hidden = false;
+  // Clamp to the viewport so the menu never spills off-screen.
+  const w = ctxMenu.offsetWidth;
+  const h = ctxMenu.offsetHeight;
+  ctxMenu.style.left = Math.min(x, window.innerWidth - w - 6) + "px";
+  ctxMenu.style.top = Math.min(y, window.innerHeight - h - 6) + "px";
+  // Tab-specific items make no sense on empty area.
+  const onTab = tabId != null;
+  for (const item of ctxMenu.querySelectorAll('[data-act="duplicate"],[data-act="close"]')) {
+    item.hidden = !onTab;
+  }
+}
+
+function hideCtxMenu() {
+  ctxMenu.hidden = true;
+  ctxTargetId = null;
+}
+
+openListEl.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const row = e.target.closest(".otab");
+  showCtxMenu(e.clientX, e.clientY, row ? Number(row.dataset.id) : null);
+});
+
+// Right-clicking the empty part of the section still offers "New tab".
+document.getElementById("open-section").addEventListener("contextmenu", (e) => {
+  if (e.target.closest(".otab")) return; // handled above
+  e.preventDefault();
+  showCtxMenu(e.clientX, e.clientY, null);
+});
+
+ctxMenu.addEventListener("click", (e) => {
+  const btn = e.target.closest(".ctx-item");
+  if (!btn) return;
+  const act = btn.dataset.act;
+  if (act === "new") {
+    createTab();
+  } else if (act === "duplicate" && ctxTargetId != null) {
+    chrome.tabs.duplicate(ctxTargetId);
+  } else if (act === "close" && ctxTargetId != null) {
+    chrome.tabs.remove(ctxTargetId);
+  }
+  hideCtxMenu();
+});
+
+// Any click / scroll / Escape elsewhere dismisses the menu.
+window.addEventListener("click", (e) => {
+  if (!ctxMenu.hidden && !e.target.closest("#ctx-menu")) hideCtxMenu();
+});
+window.addEventListener("blur", hideCtxMenu);
+document.addEventListener("scroll", hideCtxMenu, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hideCtxMenu();
+});
+
+newTabBtn.addEventListener("click", createTab);
+
+/* ---- keep the live list in sync with the browser ---- */
+
+function wireOpenTabEvents() {
+  chrome.tabs.onCreated.addListener(scheduleOpenRender);
+  chrome.tabs.onRemoved.addListener(scheduleOpenRender);
+  chrome.tabs.onMoved.addListener(scheduleOpenRender);
+  chrome.tabs.onActivated.addListener(scheduleOpenRender);
+  chrome.tabs.onAttached.addListener(scheduleOpenRender);
+  chrome.tabs.onDetached.addListener(scheduleOpenRender);
+  chrome.tabs.onReplaced.addListener(scheduleOpenRender);
+  chrome.tabs.onUpdated.addListener((_id, changeInfo) => {
+    // Only re-render on changes that are visible in the row.
+    if (
+      "title" in changeInfo ||
+      "favIconUrl" in changeInfo ||
+      "url" in changeInfo ||
+      "status" in changeInfo
+    ) {
+      scheduleOpenRender();
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -206,8 +481,16 @@ function buildGroup(group) {
   restore.addEventListener("click", (e) => {
     e.stopPropagation();
     if (group.tabs.length === 0) return;
-    send({ type: "RESTORE_GROUP", id: group.id });
-    toast(`Opening "${group.name}"…`);
+    // Workspace switch: back up the current tabs and replace them with this
+    // group's tabs. `switch` + windowId tell the worker to close the old tabs.
+    send({
+      type: "RESTORE_GROUP",
+      id: group.id,
+      switch: true,
+      windowId:
+        panelWindowId !== chrome.windows.WINDOW_ID_NONE ? panelWindowId : undefined,
+    });
+    toast(`Switching to "${group.name}"…`);
   });
 
   head.append(caret, dot, name, count, restore);
@@ -370,4 +653,14 @@ chrome.storage.onChanged.addListener((_changes, areaName) => {
   if (areaName === "local" || areaName === "sync") reload();
 });
 
-reload();
+/* ------------------------------------------------------------------ *
+ * Startup
+ * ------------------------------------------------------------------ */
+
+function init() {
+  wireOpenTabEvents();
+  renderOpenTabs();
+  reload();
+}
+
+init();
