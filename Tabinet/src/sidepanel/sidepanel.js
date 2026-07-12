@@ -47,6 +47,8 @@ const openListEl = document.getElementById("open-list");
 const openCountEl = document.getElementById("open-count");
 const newTabBtn = document.getElementById("new-tab-btn");
 const ctxMenu = document.getElementById("ctx-menu");
+const dockHint = document.getElementById("dock-hint");
+const dockHintClose = document.getElementById("dock-hint-close");
 
 // The window that hosts this side panel. Resolved once; all live-tab queries
 // and events are scoped to it so the sidebar always mirrors its own window.
@@ -660,7 +662,12 @@ saveGroupBtn.addEventListener("click", async () => {
   saveGroupBtn.disabled = true;
   const res = await send({ type: "SAVE_CURRENT_GROUP" });
   saveGroupBtn.disabled = false;
-  if (res?.ok) {
+  if (res?.status === "duplicate") {
+    // Already saved (same name + same tabs) — surface it instead of duplicating.
+    expanded.add(res.group.id);
+    toast(`"${res.group.name}" is already saved.`);
+    reload();
+  } else if (res?.ok) {
     expanded.add(res.group.id);
     toast(`Saved group "${res.group.name}".`);
     reload();
@@ -685,6 +692,28 @@ chrome.storage.onChanged.addListener((_changes, areaName) => {
 });
 
 /* ------------------------------------------------------------------ *
+ * Dock hint — the panel's left/right position is a Chrome setting the
+ * sidePanel API can't change, so we just tell the user how to do it and
+ * remember (locally) once they dismiss it.
+ * ------------------------------------------------------------------ */
+
+const DOCK_HINT_KEY = "tabinetHideDockHint";
+
+async function initDockHint() {
+  try {
+    const { [DOCK_HINT_KEY]: hidden } =
+      await chrome.storage.local.get(DOCK_HINT_KEY);
+    dockHint.hidden = Boolean(hidden);
+  } catch {
+    dockHint.hidden = false;
+  }
+  dockHintClose.addEventListener("click", () => {
+    dockHint.hidden = true;
+    chrome.storage.local.set({ [DOCK_HINT_KEY]: true });
+  });
+}
+
+/* ------------------------------------------------------------------ *
  * Startup
  * ------------------------------------------------------------------ */
 
@@ -692,6 +721,7 @@ function init() {
   wireOpenTabEvents();
   renderOpenTabs();
   reload();
+  initDockHint();
 }
 
 init();

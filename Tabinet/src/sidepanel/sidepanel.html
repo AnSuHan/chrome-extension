@@ -20,6 +20,26 @@
 
     <p id="toast" class="toast" role="status" hidden></p>
 
+    <!-- One-time hint: the side panel's left/right position is a Chrome setting,
+         not something the extension can control via the sidePanel API. -->
+    <div id="dock-hint" class="dock-hint" hidden>
+      <span class="dock-hint-ic">&#128161;</span>
+      <span class="dock-hint-text">
+        To move this panel to the left, right-click the panel and choose
+        <b>&ldquo;Show on left&rdquo;</b> (or Chrome Settings &rarr; Appearance
+        &rarr; Side panel).
+      </span>
+      <button
+        id="dock-hint-close"
+        class="dock-hint-close"
+        type="button"
+        title="Dismiss"
+        aria-label="Dismiss hint"
+      >
+        &times;
+      </button>
+    </div>
+
     <main class="scroll">
       <!-- Live tabs of the current window (Safari-style sidebar) -->
       <section class="section" id="open-section">

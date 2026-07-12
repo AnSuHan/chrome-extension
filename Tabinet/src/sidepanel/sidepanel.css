@@ -145,6 +145,60 @@ body {
   line-height: 1;
 }
 
+/* ---------- dock hint (how to move the panel to the left) ---------- */
+.dock-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 14px 0;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Without this, `display: flex` above overrides the [hidden] attribute's
+   display:none, so the banner would stay visible even when JS hides it. */
+.dock-hint[hidden] {
+  display: none;
+}
+
+.dock-hint-ic {
+  flex-shrink: 0;
+  line-height: 1.35;
+}
+
+.dock-hint-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.dock-hint-text b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.dock-hint-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 6px;
+}
+
+.dock-hint-close:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed;
