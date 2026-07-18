@@ -1,9 +1,19 @@
 /**
  * Tabinet — background service worker (Manifest V3, module).
  *
- * Owns the tab-capture and tab-restore operations so the UI stays thin.
- * The side panel / editor talk to the worker via chrome.runtime.sendMessage.
- * Also wires the toolbar icon to open the docked side panel.
+ * Owns tab capture / restore and Safari-style workspace switching so the UI
+ * stays thin. The side panel / editor talk to the worker via
+ * chrome.runtime.sendMessage. Also wires the toolbar icon to the side panel.
+ *
+ * Workspace model — native tab groups (no reload, nothing leaks into Alt+Tab):
+ *   Each loaded workspace lives as a NATIVE Chrome tab group INSIDE the window.
+ *   The active workspace's group is expanded; every other loaded workspace's
+ *   group is collapsed, so its tabs are hidden (only a chip remains) but stay
+ *   fully loaded. Switching just collapses the current group and expands the
+ *   target's — the tabs are never closed, so there is zero reload and no extra
+ *   browser window (which would otherwise show up in Alt+Tab / the taskbar).
+ *   A per-window LRU cap bounds how many workspaces stay loaded at once so
+ *   memory can't grow without limit; evicted ones reopen lazily on return.
  */
 
 import {
@@ -103,7 +113,7 @@ function effectiveTab(tab) {
   return { url: u, title: tab.title ?? "" };
 }
 
-/** Snapshot a window's tabs into savable { url, title } records. */
+/** Snapshot a list of tabs into savable { url, title } records. */
 function snapshotTabs(tabs) {
   return tabs.map(effectiveTab).filter((t) => /^https?:/.test(t.url));
 }
@@ -111,14 +121,11 @@ function snapshotTabs(tabs) {
 /* ------------------------------------------------------------------ *
  * Active-workspace tracking
  *
- * Remembers which saved group is currently loaded in each window. Stored in
- * chrome.storage.local (not session) so the mapping survives a service-worker
- * restart AND a browser restart — the side panel reads it to show which group
- * a window is currently viewing, and the live-sync below writes the window's
- * tabs back into that group as the user browses.
- *
- * The map lives under a single key: { [windowId]: groupId }. Dead windows are
- * pruned on chrome.windows.onRemoved.
+ * Remembers which saved group is currently active (expanded) in each window.
+ * Stored in chrome.storage.local (not session) so the mapping survives a
+ * service-worker restart — the side panel reads it to show which workspace a
+ * window is viewing, and live-sync writes that workspace's tabs back as the
+ * user browses. The map lives under one key: { [windowId]: savedGroupId }.
  * ------------------------------------------------------------------ */
 
 const ACTIVE_KEY = "tabinet.active";
@@ -145,301 +152,233 @@ async function clearActiveGroup(windowId) {
   await chrome.storage.local.set({ [ACTIVE_KEY]: map });
 }
 
-// Windows currently mid-switch: their tab churn must not trigger live-sync
-// (that would write a half-open set into the wrong group).
+// Windows currently mid-switch: their tab churn must not trigger live-sync,
+// new-tab adoption, or emptied-workspace handling (that would write a half-open
+// set into the wrong group, or re-enter the switch).
 const switching = new Set();
 
-// Cached tab count per window, so onRemoved can detect "the window just became
-// empty" without an async query that might arrive after the window is gone.
-const windowTabCounts = new Map();
-
-async function primeTabCounts() {
-  try {
-    const wins = await chrome.windows.getAll({ populate: true });
-    for (const w of wins) {
-      if (w.id != null) windowTabCounts.set(w.id, (w.tabs ?? []).length);
-    }
-  } catch (e) {
-    console.error("Tabinet primeTabCounts:", e);
-  }
-}
-primeTabCounts();
-
 /* ------------------------------------------------------------------ *
- * Stash window — keep switched-away workspaces' tabs ALIVE (no reload)
+ * Workspace ↔ native-tab-group bookkeeping
  *
- * Chrome has no "hidden tab" API, so switching workspaces used to close the old
- * tabs and reopen the target ones — which reloads them from the network every
- * time you switch back. Instead we PARK the outgoing workspace's live tabs in a
- * single minimized background window and, on return, move them straight back
- * into view. Because the tabs are never closed, their loaded state (scroll,
- * forms, logged-in pages) survives a round trip with zero reload.
- *
- * The stash window keeps a permanent about:blank "keeper" tab so it never
- * auto-closes when its last parked group is pulled back. State lives in
- * storage.local so it survives a service-worker restart:
- *   tabinet.stashWindow -> windowId
- *   tabinet.stashed      -> { [groupId]: tabId[] }
- * It is intentionally session-scoped: after a full browser restart the parked
- * tab ids are stale, so we drop them (the group then reopens lazily).
+ * Two storage.local maps, nested by window so multiple windows each keep their
+ * own loaded workspaces:
+ *   tabinet.wsgroups -> { [windowId]: { [savedGroupId]: nativeTabGroupId } }
+ *   tabinet.wsorder  -> { [windowId]: [savedGroupId, ...] }   // MRU-first (LRU)
+ * Native tab-group ids are real browser state, so they survive a service-worker
+ * restart; we validate them with chrome.tabGroups.get before trusting them.
  * ------------------------------------------------------------------ */
 
-const STASH_WIN_KEY = "tabinet.stashWindow";
-const STASH_MAP_KEY = "tabinet.stashed";
-const STASH_ORDER_KEY = "tabinet.stashOrder";
+const WS_MAP_KEY = "tabinet.wsgroups";
+const WS_ORDER_KEY = "tabinet.wsorder";
+const NONE = chrome.tabGroups.TAB_GROUP_ID_NONE;
 
-// How many switched-away workspaces stay LOADED in the stash window at once.
-// Memory is bounded to the active workspace + up to this many parked ones; any
-// older parked workspace is evicted (its tabs closed) so memory can't balloon as
-// you accumulate workspaces. Evicted groups reopen lazily on return — so the
-// common back-and-forth between a couple of workspaces stays reload-free while
-// the memory footprint stays fixed. Raise this to trade memory for more
-// reload-free workspaces.
-const MAX_STASHED_ALIVE = 2;
+// Per window, how many workspaces stay LOADED (grouped, in memory) at once.
+// The active one + a few recent ones are kept live for zero-reload switching;
+// beyond this the least-recently-used workspace's tabs are closed (it reopens
+// lazily on return), so memory stays bounded no matter how many workspaces you
+// accumulate. Raise to trade memory for more reload-free workspaces.
+const MAX_LOADED_WORKSPACES = 3;
 
-// In-memory mirror of the stash window id, so the (synchronous) tab-event
-// listeners can cheaply skip churn happening inside the stash window.
-let stashWindowId = null;
+// Our color names line up 1:1 with chrome.tabGroups.Color; fall back defensively.
+const VALID_GROUP_COLORS = new Set([
+  "grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange",
+]);
+const colorFor = (c) => (VALID_GROUP_COLORS.has(c) ? c : "grey");
 
-async function loadStashWindowId() {
-  const data = await chrome.storage.local.get(STASH_WIN_KEY);
-  stashWindowId = data[STASH_WIN_KEY] ?? null;
-  // Drop a stale id (window closed / browser restarted while we were asleep).
-  if (stashWindowId != null) {
-    const win = await chrome.windows.get(stashWindowId).catch(() => null);
-    if (!win) await clearStash();
+async function getAllWs(key) {
+  const data = await chrome.storage.local.get(key);
+  return data[key] ?? {};
+}
+
+async function getWsMap(windowId) {
+  return (await getAllWs(WS_MAP_KEY))[windowId] ?? {};
+}
+
+async function setWsMap(windowId, map) {
+  const all = await getAllWs(WS_MAP_KEY);
+  if (Object.keys(map).length) all[windowId] = map;
+  else delete all[windowId];
+  await chrome.storage.local.set({ [WS_MAP_KEY]: all });
+}
+
+async function getWsOrder(windowId) {
+  return (await getAllWs(WS_ORDER_KEY))[windowId] ?? [];
+}
+
+async function setWsOrder(windowId, order) {
+  const all = await getAllWs(WS_ORDER_KEY);
+  if (order.length) all[windowId] = order;
+  else delete all[windowId];
+  await chrome.storage.local.set({ [WS_ORDER_KEY]: all });
+}
+
+// Mark a workspace most-recently-used in its window (front of the LRU list).
+async function touchWorkspaceOrder(windowId, savedId) {
+  const order = (await getWsOrder(windowId)).filter((s) => s !== savedId);
+  order.unshift(savedId);
+  await setWsOrder(windowId, order);
+}
+
+// Forget all bookkeeping for a closed window.
+async function cleanupWindow(windowId) {
+  const mapAll = await getAllWs(WS_MAP_KEY);
+  if (windowId in mapAll) {
+    delete mapAll[windowId];
+    await chrome.storage.local.set({ [WS_MAP_KEY]: mapAll });
   }
-}
-loadStashWindowId();
-
-async function getStashedMap() {
-  const data = await chrome.storage.local.get(STASH_MAP_KEY);
-  return data[STASH_MAP_KEY] ?? {};
-}
-
-async function setStashedMap(map) {
-  await chrome.storage.local.set({ [STASH_MAP_KEY]: map });
-}
-
-// Most-recently-parked-first list of group ids that still hold live parked tabs.
-// Drives LRU eviction so the number of loaded parked workspaces stays capped.
-async function getStashOrder() {
-  const data = await chrome.storage.local.get(STASH_ORDER_KEY);
-  return data[STASH_ORDER_KEY] ?? [];
-}
-
-async function setStashOrder(order) {
-  await chrome.storage.local.set({ [STASH_ORDER_KEY]: order });
-}
-
-async function clearStash() {
-  stashWindowId = null;
-  await chrome.storage.local.remove([
-    STASH_WIN_KEY,
-    STASH_MAP_KEY,
-    STASH_ORDER_KEY,
-  ]);
-}
-
-const isStashWindow = (wid) => wid != null && wid === stashWindowId;
-
-// Create (once) the minimized background window that parks inactive workspaces.
-// A permanent about:blank keeper tab keeps it from auto-closing when emptied.
-async function ensureStashWindow() {
-  // The service worker is torn down when idle, which drops the in-memory id.
-  // Recover it from storage before creating, so a post-restart switch REUSES the
-  // existing stash window instead of spawning a brand-new one every time.
-  if (stashWindowId == null) await loadStashWindowId();
-  if (stashWindowId != null) {
-    const win = await chrome.windows.get(stashWindowId).catch(() => null);
-    if (win) return stashWindowId;
-    stashWindowId = null;
+  const ordAll = await getAllWs(WS_ORDER_KEY);
+  if (windowId in ordAll) {
+    delete ordAll[windowId];
+    await chrome.storage.local.set({ [WS_ORDER_KEY]: ordAll });
   }
-  const win = await chrome.windows
-    .create({ focused: false, state: "minimized", url: "about:blank" })
-    .catch((e) => {
-      console.error("Tabinet ensureStashWindow:", e);
-      return null;
-    });
-  if (!win?.id) return null;
-  stashWindowId = win.id;
-  await chrome.storage.local.set({ [STASH_WIN_KEY]: win.id });
-  // Force it to the background in case the platform surfaced it on creation.
-  await chrome.windows
-    .update(win.id, { state: "minimized", focused: false })
-    .catch(() => {});
-  return stashWindowId;
+  await clearActiveGroup(windowId);
 }
 
-// Close a group's parked tabs and forget them; it will reopen lazily on return.
-// Frees the tabs' memory. Does NOT touch the LRU order — the caller owns that.
-async function closeStashedTabs(groupId) {
-  const map = await getStashedMap();
-  const ids = map[groupId];
-  if (!ids) return;
-  delete map[groupId];
-  await setStashedMap(map);
-  const live = ids.filter((id) => id != null);
-  if (live.length) await chrome.tabs.remove(live).catch(() => {});
+// The native tab-group id currently holding `savedId` in `windowId`, or null if
+// it isn't loaded (or its group was torn down behind our back).
+async function loadedGroupId(windowId, savedId) {
+  const gid = (await getWsMap(windowId))[savedId];
+  if (gid == null) return null;
+  const g = await chrome.tabGroups.get(gid).catch(() => null);
+  if (g && g.windowId === windowId) return gid;
+  // Stale mapping — drop it.
+  const map = await getWsMap(windowId);
+  delete map[savedId];
+  await setWsMap(windowId, map);
+  return null;
 }
 
-// Park a workspace's live tabs in the stash window (kept loaded, not reloaded),
-// then evict the least-recently-parked workspaces beyond MAX_STASHED_ALIVE so
-// the loaded-tab count — and memory — stays bounded.
-async function stashGroupTabs(groupId, tabIds) {
-  const ids = tabIds.filter((id) => id != null);
-  if (!ids.length) return;
-  const stashWin = await ensureStashWindow();
-  if (stashWin == null) {
-    // No stash window available — closing is the safe fallback (the snapshot was
-    // already persisted, so nothing is lost; it just reloads on return).
-    await chrome.tabs.remove(ids).catch(() => {});
-    return;
-  }
-  await chrome.tabs
-    .move(ids, { windowId: stashWin, index: -1 })
-    .catch((e) => console.error("Tabinet stashGroupTabs:", e));
-  // Moving the (formerly active) tabs in can pull the stash window forward on
-  // some platforms — keep it minimized and unfocused so it never flashes up.
-  await chrome.windows
-    .update(stashWin, { state: "minimized", focused: false })
-    .catch(() => {});
-  const map = await getStashedMap();
-  map[groupId] = ids;
-  await setStashedMap(map);
-
-  // Mark this group most-recently parked; evict everything past the cap so the
-  // number of workspaces held in memory never grows without bound.
-  const order = (await getStashOrder()).filter((g) => g !== groupId);
-  order.unshift(groupId);
-  const evicted = order.splice(MAX_STASHED_ALIVE);
-  await setStashOrder(order);
-  for (const g of evicted) await closeStashedTabs(g);
-}
-
-// Pull a workspace's parked tabs back into `windowId`. Returns the moved tab ids
-// (empty when nothing was parked or the parked tabs are gone).
-async function unstashGroupTabs(groupId, windowId) {
-  const map = await getStashedMap();
-  const ids = (map[groupId] ?? []).filter((id) => id != null);
-  if (groupId in map) {
-    delete map[groupId];
-    await setStashedMap(map);
-  }
-  const order = await getStashOrder();
-  const oi = order.indexOf(groupId);
-  if (oi !== -1) {
-    order.splice(oi, 1);
-    await setStashOrder(order);
-  }
-  if (!ids.length || stashWindowId == null) return [];
-  // Keep only tabs that are still alive and still sitting in the stash window.
-  const alive = [];
-  for (const id of ids) {
-    const t = await chrome.tabs.get(id).catch(() => null);
-    if (t && t.windowId === stashWindowId) alive.push(id);
-  }
-  if (!alive.length) return [];
-  await chrome.tabs
-    .move(alive, { windowId, index: -1 })
-    .catch((e) => console.error("Tabinet unstashGroupTabs:", e));
-  return alive;
-}
-
-// Drop a workspace's parked tabs for good (e.g. its group was deleted).
-async function discardStashedGroup(groupId) {
-  await closeStashedTabs(groupId);
-  const order = await getStashOrder();
-  const i = order.indexOf(groupId);
-  if (i !== -1) {
-    order.splice(i, 1);
-    await setStashOrder(order);
-  }
-}
-
-// Close parked tabs whose group no longer exists. The side panel deletes groups
-// straight through the storage layer (not via a worker message), so this is how
-// deletions from anywhere get their parked tabs cleaned up.
-async function reconcileStash() {
-  const map = await getStashedMap();
-  const parked = Object.keys(map);
-  if (!parked.length) return;
-  const alive = new Set((await getGroups()).map((g) => g.id));
-  for (const gid of parked) {
-    if (!alive.has(gid)) await discardStashedGroup(gid);
-  }
+async function setLoadedGroupId(windowId, savedId, gid) {
+  const map = await getWsMap(windowId);
+  if (gid == null) delete map[savedId];
+  else map[savedId] = gid;
+  await setWsMap(windowId, map);
 }
 
 /**
- * Open a saved group's tabs (in `windowId`), ungrouped.
+ * Open a saved workspace as a fresh native tab group in `windowId`.
  *
- * Tabs open onto a tiny LOCAL placeholder page instead of their real URL, so a
- * big group appears instantly with zero network load. Each tab navigates to its
- * real URL only when the user actually views it (see src/lazy/lazy.js). This is
- * how Chrome's own session restore stays fast, and it sidesteps chrome.tabs.
- * discard entirely (which was fragile on freshly-created tabs).
- *
- * We deliberately do NOT bundle the tabs into a native Chrome tab group:
- * a titled tab group gets auto-saved and shown as a chip on the bookmarks bar,
- * which the user doesn't want. Tabinet keeps its own groups in storage instead.
+ * Tabs open onto a tiny LOCAL placeholder page (see src/lazy/lazy.js) instead
+ * of their real URL, so a big workspace appears instantly with zero network
+ * load; each tab navigates to its real URL only when first viewed. The tabs are
+ * then bundled into one native tab group titled/colored like the workspace.
+ * Returns { gid, tabIds } (gid null if nothing could be opened).
  */
-async function openGroupTabs(group, windowId) {
-  // Fire every create at once; requests dispatch in array order so tabs still
-  // land in order, and each create is cheap (a local page, no network).
+async function openWorkspaceGroup(group, windowId) {
   const created = await Promise.all(
     group.tabs.map((tab) =>
       chrome.tabs
         .create({ url: lazyUrl(tab), active: false, windowId })
-        .then((t) => t.id),
+        .then((t) => t.id)
+        .catch(() => null),
     ),
   );
+  const tabIds = created.filter((id) => id != null);
+  if (!tabIds.length) return { gid: null, tabIds: [] };
 
-  return { created };
+  let gid = null;
+  try {
+    gid = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+    await chrome.tabGroups.update(gid, {
+      title: group.name,
+      color: colorFor(group.color),
+      collapsed: false,
+    });
+  } catch (e) {
+    console.error("Tabinet openWorkspaceGroup:", e);
+  }
+  if (gid != null) await setLoadedGroupId(windowId, group.id, gid);
+  return { gid, tabIds };
 }
 
-/** Open every tab of a saved group (ungrouped) in the current window. */
+/**
+ * Ensure the outgoing active workspace's tabs are inside its native group, so
+ * we can collapse them out of sight. Any stray ungrouped tabs in the window
+ * (e.g. plain new tabs) are folded into that group too. Returns the group id.
+ */
+async function ensureWorkspaceGrouped(windowId, group) {
+  const ungrouped = await chrome.tabs.query({ windowId, groupId: NONE });
+  const strayIds = ungrouped.map((t) => t.id).filter((id) => id != null);
+  let gid = await loadedGroupId(windowId, group.id);
+
+  if (gid != null) {
+    if (strayIds.length) {
+      await chrome.tabs.group({ tabIds: strayIds, groupId: gid }).catch((e) =>
+        console.error("Tabinet ensureWorkspaceGrouped add:", e),
+      );
+    }
+    return gid;
+  }
+  if (!strayIds.length) return null; // nothing to group
+  try {
+    gid = await chrome.tabs.group({
+      tabIds: strayIds,
+      createProperties: { windowId },
+    });
+    await chrome.tabGroups.update(gid, {
+      title: group.name,
+      color: colorFor(group.color),
+    });
+  } catch (e) {
+    console.error("Tabinet ensureWorkspaceGrouped create:", e);
+    return null;
+  }
+  await setLoadedGroupId(windowId, group.id, gid);
+  return gid;
+}
+
+// Close a loaded workspace's tabs and forget its group (reopens lazily later).
+async function closeWorkspaceTabs(windowId, savedId) {
+  const gid = (await getWsMap(windowId))[savedId];
+  await setLoadedGroupId(windowId, savedId, null);
+  const order = (await getWsOrder(windowId)).filter((s) => s !== savedId);
+  await setWsOrder(windowId, order);
+  if (gid == null) return;
+  const tabs = await chrome.tabs.query({ windowId, groupId: gid }).catch(() => []);
+  const ids = tabs.map((t) => t.id).filter((id) => id != null);
+  if (ids.length) await chrome.tabs.remove(ids).catch(() => {});
+}
+
+// Enforce the per-window loaded-workspace cap by evicting the least-recently
+// used ones. The active/target workspace sits at the front, so it's never hit.
+async function evictWorkspaces(windowId) {
+  const order = await getWsOrder(windowId);
+  if (order.length <= MAX_LOADED_WORKSPACES) return;
+  const evicted = order.slice(MAX_LOADED_WORKSPACES);
+  for (const savedId of evicted) await closeWorkspaceTabs(windowId, savedId);
+}
+
+/** Open every tab of a saved group (ungrouped, additive) in the current window. */
 async function restoreGroup(id) {
   const groups = await getGroups();
   const group = groups.find((g) => g.id === id);
   if (!group || group.tabs.length === 0) return;
-  await openGroupTabs(group);
+  await Promise.all(
+    group.tabs.map((tab) =>
+      chrome.tabs.create({ url: lazyUrl(tab), active: false }).catch(() => {}),
+    ),
+  );
 }
 
 /**
- * Persist the window's current tabs before we replace them, so switching back
- * and forth never loses tabs — but WITHOUT growing the group count:
- *  - if this window already has an active workspace, write the tabs back into
- *    that same group (in place);
- *  - otherwise (first switch here) adopt a matching saved group if the tabs
- *    already belong to one, and only fall back to a one-time "Backup —" group
- *    when the tabs are genuinely unsaved.
+ * Persist unsaved ungrouped tabs before we clear them, so a first-ever switch
+ * from a not-yet-tracked window never loses them: adopt a matching saved group
+ * if the tabs already belong to one, else drop a one-time "Backup —" group.
  */
-async function persistCurrentTabs(windowId, current, groups) {
-  if (!current.length) return; // nothing worth saving; don't empty a group
-
-  const prevId = await getActiveGroup(windowId);
-  if (prevId && groups.some((g) => g.id === prevId)) {
-    await updateGroup(prevId, { tabs: current });
-    return;
-  }
-
-  // No known workspace for this window. If the current tabs already match a
-  // saved group, they're not lost — adopt it instead of duplicating.
+async function persistUnsavedTabs(current, groups) {
+  if (!current.length) return;
   const key = tabsKey(current);
-  if (groups.some((g) => tabsKey(g.tabs) === key)) return;
-
+  if (groups.some((g) => tabsKey(g.tabs) === key)) return; // already saved
   await addGroup({ name: `Backup — ${new Date().toLocaleString()}`, tabs: current });
 }
 
 /**
- * Switch a window to a saved group (Safari-style workspace switch):
- *  1. write the window's current tabs back into the workspace they came from,
- *  2. bring the target group's tabs into the window — reusing the live tabs we
- *     parked in the stash window last time (no reload) when we still have them,
- *     else opening them lazily,
- *  3. PARK the previously-open tabs in the stash window (kept alive, not closed)
- *     so switching back to them doesn't reload — closing them only when they're
- *     not a tracked workspace,
+ * Switch a window to a saved workspace (Safari-style):
+ *  1. bring the target workspace into view — reuse its already-loaded native
+ *     group (expand it → zero reload) when present, else open it fresh,
+ *  2. hide the OUTGOING workspace by collapsing its native group (its tabs are
+ *     kept alive, just not visible), grouping any stray ungrouped tabs first,
+ *  3. bound memory by evicting least-recently-used loaded workspaces,
  *  4. remember the target as this window's active workspace.
  */
 async function switchToGroup(id, windowId) {
@@ -447,8 +386,6 @@ async function switchToGroup(id, windowId) {
   const group = groups.find((g) => g.id === id);
   if (!group || group.tabs.length === 0) return;
 
-  // Resolve the target window. Never proceed with an unknown window id — a
-  // query without one spans every window and would wipe unrelated tabs.
   if (windowId == null) {
     const w = await chrome.windows.getCurrent().catch(() => null);
     windowId = w?.id;
@@ -456,47 +393,54 @@ async function switchToGroup(id, windowId) {
   if (windowId == null) return restoreGroup(id); // can't scope safely
 
   const prevId = await getActiveGroup(windowId);
-  if (prevId === id) return; // already the active workspace — nothing to do
+  if (prevId === id) {
+    // Already active — just make sure it's expanded and focused.
+    const gid = await loadedGroupId(windowId, id);
+    if (gid != null) await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
+    return;
+  }
 
-  // Freeze live-sync for this window while we tear down + rebuild its tabs, so
-  // the intermediate churn isn't written back into any group.
   switching.add(windowId);
   try {
-    const existing = await chrome.tabs.query({ windowId });
-    const current = snapshotTabs(existing);
-
-    // 1) Persist current tabs into their workspace (in place — no new group).
-    await persistCurrentTabs(windowId, current, groups);
-
-    // 2) Bring in the target group's tabs. If we still hold them alive in the
-    //    stash window, move them straight back (zero reload); otherwise open
-    //    fresh lazy placeholders.
-    let targetIds = await unstashGroupTabs(id, windowId);
-    if (!targetIds.length) {
-      ({ created: targetIds } = await openGroupTabs(group, windowId));
+    // 1) Bring the target into view: reuse its loaded group (no reload) or open.
+    let gid = await loadedGroupId(windowId, id);
+    let firstTabId = null;
+    if (gid != null) {
+      await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
+      const tabs = await chrome.tabs.query({ windowId, groupId: gid });
+      firstTabId = tabs[0]?.id ?? null;
+    } else {
+      const opened = await openWorkspaceGroup(group, windowId);
+      gid = opened.gid;
+      firstTabId = opened.tabIds[0] ?? null;
+    }
+    if (firstTabId != null) {
+      await chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
     }
 
-    // Activate the target's first tab before touching the old ones, so removing
-    // the old active tab doesn't make Chrome surface some other tab first.
-    if (targetIds[0] != null) {
-      await chrome.tabs.update(targetIds[0], { active: true }).catch(() => {});
-    }
-
-    // 3) Park the outgoing tabs (kept alive so returning to them won't reload)
-    //    when they belong to a tracked workspace; otherwise close them — they
-    //    were already backed up by persistCurrentTabs.
-    const oldIds = existing.map((t) => t.id).filter((tid) => tid != null);
+    // 2) Hide the outgoing workspace. If it's a tracked workspace, group its
+    //    (now-ungrouped) tabs and collapse them out of sight. Otherwise the
+    //    ungrouped tabs are unsaved scratch — back them up and clear them.
     if (prevId && groups.some((g) => g.id === prevId)) {
-      await stashGroupTabs(prevId, oldIds);
-    } else if (oldIds.length) {
-      await chrome.tabs.remove(oldIds);
+      const prevGroup = groups.find((g) => g.id === prevId);
+      const prevGid = await ensureWorkspaceGrouped(windowId, prevGroup);
+      if (prevGid != null) {
+        await chrome.tabGroups.update(prevGid, { collapsed: true }).catch(() => {});
+        await touchWorkspaceOrder(windowId, prevId);
+      }
+    } else {
+      const ungrouped = await chrome.tabs.query({ windowId, groupId: NONE });
+      await persistUnsavedTabs(snapshotTabs(ungrouped), groups);
+      const ids = ungrouped.map((t) => t.id).filter((tid) => tid != null);
+      if (ids.length) await chrome.tabs.remove(ids).catch(() => {});
     }
 
-    // 4) This group is now what's loaded in the window.
-    windowTabCounts.set(windowId, targetIds.length);
-    await setActiveGroup(windowId, id);
+    // 3) Mark target most-recent, then enforce the memory cap.
+    await touchWorkspaceOrder(windowId, id);
+    await evictWorkspaces(windowId);
 
-    // Make sure focus stays on the user's window, never the stash window.
+    // 4) Record the active workspace and keep focus on this window.
+    await setActiveGroup(windowId, id);
     await chrome.windows.update(windowId, { focused: true }).catch(() => {});
   } finally {
     switching.delete(windowId);
@@ -506,19 +450,17 @@ async function switchToGroup(id, windowId) {
 /* ------------------------------------------------------------------ *
  * Live workspace sync
  *
- * While a window has an active workspace, mirror its live tabs back into that
- * saved group as the user browses — navigating within a tab, opening/closing/
- * reordering tabs all keep the stored snapshot current. This means the saved
- * group always reflects the real, up-to-date pages (incl. the URL a login flow
- * finally lands on), so closing and reopening never loses where you were.
+ * While a window has an active workspace, mirror the tabs in that workspace's
+ * native group back into the saved group as the user browses — so the stored
+ * snapshot always reflects the real, up-to-date pages (including where a login
+ * flow finally lands). Only the ACTIVE group's tabs are synced; collapsed
+ * (background) workspaces keep the snapshot they were frozen with.
  * ------------------------------------------------------------------ */
 
 const syncTimers = new Map(); // windowId -> timeout id
 
 function scheduleWorkspaceSync(windowId) {
-  if (windowId == null || switching.has(windowId) || isStashWindow(windowId)) {
-    return;
-  }
+  if (windowId == null || switching.has(windowId)) return;
   clearTimeout(syncTimers.get(windowId));
   // Coalesce the burst of events a single navigation/close emits.
   syncTimers.set(
@@ -539,50 +481,71 @@ async function syncWorkspace(windowId) {
 
   const groups = await getGroups();
   if (!groups.some((g) => g.id === activeId)) {
-    // The active group was deleted elsewhere — stop tracking this window.
-    await clearActiveGroup(windowId);
+    await clearActiveGroup(windowId); // deleted elsewhere — stop tracking
     return;
   }
 
-  const tabs = snapshotTabs(await chrome.tabs.query({ windowId }));
-  // Never overwrite a saved group with an empty set — an emptied window is
-  // handled as a workspace switch (see handleEmptiedWorkspace), not a wipe.
+  // The active workspace's tabs are those in its native group, or — before it
+  // has been grouped — the window's ungrouped tabs.
+  const gid = await loadedGroupId(windowId, activeId);
+  const query = gid != null ? { windowId, groupId: gid } : { windowId, groupId: NONE };
+  const tabs = snapshotTabs(await chrome.tabs.query(query));
+  // Never overwrite a saved group with an empty set — an emptied workspace is
+  // handled as a switch (see handleEmptiedWorkspace), not a wipe.
   if (!tabs.length) return;
   await updateGroup(activeId, { tabs });
 }
 
 /**
- * The active workspace's tabs were all closed. Instead of letting the window
- * (and possibly Chrome) close, load another saved group into it so the window
- * survives and the user lands somewhere sensible. The just-emptied group keeps
- * its last saved snapshot (we never persist an empty set over it).
+ * The active workspace's tabs were all closed. Switch the window to another
+ * loaded workspace (expand its collapsed group — no reload) if one exists, else
+ * open the next saved group, else leave a blank tab so the window survives. The
+ * just-emptied group keeps its last saved snapshot.
  */
 async function handleEmptiedWorkspace(windowId, activeId) {
   if (switching.has(windowId)) return;
   switching.add(windowId);
   try {
-    // The emptied group's tabs were closed (not parked); drop any stale entry.
-    await discardStashedGroup(activeId);
+    // The emptied workspace's tabs are gone; forget its (now-empty) group.
+    await closeWorkspaceTabs(windowId, activeId);
+
+    // Prefer another workspace already loaded in this window (zero reload).
+    const order = await getWsOrder(windowId);
+    let nextId = null;
+    for (const sid of order) {
+      if (sid === activeId) continue;
+      if ((await loadedGroupId(windowId, sid)) != null) {
+        nextId = sid;
+        break;
+      }
+    }
+    if (nextId != null) {
+      const gid = await loadedGroupId(windowId, nextId);
+      await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
+      const tabs = await chrome.tabs.query({ windowId, groupId: gid });
+      if (tabs[0]?.id != null) {
+        await chrome.tabs.update(tabs[0].id, { active: true }).catch(() => {});
+      }
+      await touchWorkspaceOrder(windowId, nextId);
+      await setActiveGroup(windowId, nextId);
+      return;
+    }
+
+    // Nothing loaded — open the next non-empty saved group lazily.
     const groups = await getGroups();
     const next = groups.find((g) => g.id !== activeId && g.tabs.length > 0);
     if (next) {
-      // Reuse the next group's parked tabs (no reload) when we still hold them.
-      let ids = await unstashGroupTabs(next.id, windowId);
-      if (!ids.length) ({ created: ids } = await openGroupTabs(next, windowId));
-      if (ids[0] != null) {
-        await chrome.tabs.update(ids[0], { active: true }).catch(() => {});
+      const { tabIds } = await openWorkspaceGroup(next, windowId);
+      if (tabIds[0] != null) {
+        await chrome.tabs.update(tabIds[0], { active: true }).catch(() => {});
       }
-      windowTabCounts.set(windowId, ids.length);
+      await touchWorkspaceOrder(windowId, next.id);
       await setActiveGroup(windowId, next.id);
     } else {
-      // Nothing to switch to — just keep a blank tab so the window stays open.
-      await chrome.tabs.create({ windowId });
-      windowTabCounts.set(windowId, 1);
+      await chrome.tabs.create({ windowId }).catch(() => {});
       await clearActiveGroup(windowId);
     }
   } catch (e) {
-    // The window was already gone (e.g. it was the last window and Chrome is
-    // quitting) — nothing we can do; just drop the stale mapping.
     console.warn("Tabinet handleEmptiedWorkspace:", e);
     await clearActiveGroup(windowId).catch(() => {});
   } finally {
@@ -590,79 +553,106 @@ async function handleEmptiedWorkspace(windowId, activeId) {
   }
 }
 
+// Count the tabs currently belonging to a window's active workspace.
+async function activeWorkspaceTabCount(windowId, activeId) {
+  const gid = await loadedGroupId(windowId, activeId);
+  const query = gid != null ? { windowId, groupId: gid } : { windowId, groupId: NONE };
+  const tabs = await chrome.tabs.query(query).catch(() => []);
+  return tabs.length;
+}
+
+/**
+ * A plain new tab (Ctrl+T, sidebar "new tab", a link opened in a new tab) lands
+ * ungrouped. Fold it into the active workspace's group so it belongs to that
+ * workspace — otherwise it would stay visible after we collapse the group on the
+ * next switch, leaking into the next workspace's view.
+ */
+async function adoptTabIntoActiveGroup(tab) {
+  if (tab.groupId != null && tab.groupId !== NONE) return; // already grouped
+  const windowId = tab.windowId;
+  const activeId = await getActiveGroup(windowId);
+  if (!activeId) return;
+  const gid = await loadedGroupId(windowId, activeId);
+  if (gid == null) return; // active workspace isn't grouped yet; it IS the visible set
+  await chrome.tabs.group({ tabIds: [tab.id], groupId: gid }).catch(() => {});
+}
+
+/**
+ * Close a deleted workspace's loaded tabs across every window, and forget it.
+ * The side panel / editor delete groups straight through the storage layer, so
+ * a storage.onChanged listener drives this on any deletion.
+ */
+async function reconcileWorkspaces() {
+  const alive = new Set((await getGroups()).map((g) => g.id));
+  const mapAll = await getAllWs(WS_MAP_KEY);
+  for (const [windowId, map] of Object.entries(mapAll)) {
+    for (const savedId of Object.keys(map)) {
+      if (!alive.has(savedId)) await closeWorkspaceTabs(Number(windowId), savedId);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Event wiring
+ * ------------------------------------------------------------------ */
+
 chrome.tabs.onCreated.addListener((tab) => {
   const wid = tab.windowId;
-  if (wid == null || isStashWindow(wid)) return;
-  windowTabCounts.set(wid, (windowTabCounts.get(wid) ?? 0) + 1);
+  if (wid == null || switching.has(wid)) return; // our own switch churn
+  adoptTabIntoActiveGroup(tab).catch((e) =>
+    console.error("Tabinet adoptTab:", e),
+  );
   scheduleWorkspaceSync(wid);
 });
 
 chrome.tabs.onRemoved.addListener((_tabId, info) => {
   const wid = info.windowId;
-  if (isStashWindow(wid)) return; // stash churn is ours; never treat as a wipe
-  const prev = windowTabCounts.get(wid) ?? 1;
-  const remaining = Math.max(0, prev - 1);
-  windowTabCounts.set(wid, remaining);
-
   if (info.isWindowClosing) return; // whole window going away; leave it be
-
   (async () => {
     const activeId = await getActiveGroup(wid);
     if (!activeId) return;
-    if (remaining <= 0) await handleEmptiedWorkspace(wid, activeId);
-    else scheduleWorkspaceSync(wid);
+    if ((await activeWorkspaceTabCount(wid, activeId)) <= 0) {
+      await handleEmptiedWorkspace(wid, activeId);
+    } else {
+      scheduleWorkspaceSync(wid);
+    }
   })().catch((e) => console.error("Tabinet onRemoved:", e));
 });
 
-chrome.tabs.onMoved.addListener((_tabId, info) => {
-  if (isStashWindow(info.windowId)) return;
-  scheduleWorkspaceSync(info.windowId);
-});
+chrome.tabs.onMoved.addListener((_tabId, info) =>
+  scheduleWorkspaceSync(info.windowId),
+);
 
-chrome.tabs.onAttached.addListener((_tabId, info) => {
-  if (isStashWindow(info.newWindowId)) return;
-  windowTabCounts.set(
-    info.newWindowId,
-    (windowTabCounts.get(info.newWindowId) ?? 0) + 1,
-  );
-  scheduleWorkspaceSync(info.newWindowId);
-});
+chrome.tabs.onAttached.addListener((_tabId, info) =>
+  scheduleWorkspaceSync(info.newWindowId),
+);
 
-chrome.tabs.onDetached.addListener((_tabId, info) => {
-  if (isStashWindow(info.oldWindowId)) return;
-  const prev = windowTabCounts.get(info.oldWindowId) ?? 1;
-  windowTabCounts.set(info.oldWindowId, Math.max(0, prev - 1));
-  scheduleWorkspaceSync(info.oldWindowId);
-});
+chrome.tabs.onDetached.addListener((_tabId, info) =>
+  scheduleWorkspaceSync(info.oldWindowId),
+);
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-  if (isStashWindow(tab.windowId)) return;
-  // A finished navigation (or a lazy placeholder resolving to its real URL)
-  // is the interesting signal — that's when the stored URL should update.
+  // A finished navigation (or a lazy placeholder resolving to its real URL) is
+  // the interesting signal — that's when the stored URL should update.
   if (changeInfo.url || changeInfo.status === "complete") {
     scheduleWorkspaceSync(tab.windowId);
   }
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {
-  // The stash window went away (user closed it, or the browser restarted) —
-  // its parked tabs are gone, so forget all stash bookkeeping.
-  if (isStashWindow(windowId)) {
-    clearStash().catch(() => {});
-    return;
-  }
-  windowTabCounts.delete(windowId);
   clearTimeout(syncTimers.get(windowId));
   syncTimers.delete(windowId);
-  clearActiveGroup(windowId).catch(() => {});
+  cleanupWindow(windowId).catch((e) => console.error("Tabinet onRemoved(win):", e));
 });
 
-// The group list changed (a delete may have happened in the side panel or the
-// editor, which write straight to storage). Prune parked tabs for any group
-// that no longer exists. "tabinet.order" is the storage layer's group index key.
+// A deletion in the side panel / editor writes straight to storage; prune any
+// loaded tabs for groups that no longer exist. "tabinet.order" is the storage
+// layer's group index key, which changes on add/remove.
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if ((areaName === "local" || areaName === "sync") && "tabinet.order" in changes) {
-    reconcileStash().catch((e) => console.error("Tabinet reconcileStash:", e));
+    reconcileWorkspaces().catch((e) =>
+      console.error("Tabinet reconcileWorkspaces:", e),
+    );
   }
 });
 
@@ -678,17 +668,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       }
       case "RESTORE_GROUP":
-        // The sidebar's "Open all" switches workspace (persist current tabs
-        // in place + close old); other callers (editor) keep additive restore.
+        // "Open all" switches workspace (collapse current + show target); other
+        // callers (editor) keep the additive restore.
         if (msg.switch) await switchToGroup(msg.id, msg.windowId);
         else await restoreGroup(msg.id);
         sendResponse({ ok: true });
         break;
       case "REMOVE_GROUP":
-        // Close any tabs still parked for this group before dropping it, so the
-        // stash window doesn't keep orphaned tabs alive.
-        await discardStashedGroup(msg.id);
-        await removeGroup(msg.id);
+        await removeGroup(msg.id); // reconcileWorkspaces (storage.onChanged) cleans tabs
         sendResponse({ ok: true });
         break;
       case "RENAME_GROUP":

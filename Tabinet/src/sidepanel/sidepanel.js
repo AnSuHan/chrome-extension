@@ -152,7 +152,26 @@ async function queryOpenTabs() {
       console.error("Tabinet: window resolution failed", e);
     }
   }
-  return tabs;
+  return onlyVisibleTabs(tabs);
+}
+
+// Workspaces the user has switched away from live on as COLLAPSED native tab
+// groups (kept loaded for zero-reload switching). Their tabs aren't visible in
+// the window, so hide them from the sidebar's live list too — show only the
+// active workspace's tabs (ungrouped tabs + tabs in expanded groups).
+async function onlyVisibleTabs(tabs) {
+  if (!tabs.length) return tabs;
+  const windowId = tabs[0].windowId;
+  let collapsed = new Set();
+  try {
+    const groups = await chrome.tabGroups.query({ windowId, collapsed: true });
+    collapsed = new Set(groups.map((g) => g.id));
+  } catch {
+    /* tabGroups may be unavailable; fall back to showing everything */
+  }
+  if (!collapsed.size) return tabs;
+  const NONE = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+  return tabs.filter((t) => t.groupId === NONE || !collapsed.has(t.groupId));
 }
 
 function createTab() {
@@ -407,6 +426,13 @@ function wireOpenTabEvents() {
       scheduleOpenRender();
     }
   });
+  // Collapsing/expanding a workspace's native group changes which tabs are
+  // visible, so re-render on tab-group changes too.
+  if (chrome.tabGroups) {
+    chrome.tabGroups.onUpdated.addListener(scheduleOpenRender);
+    chrome.tabGroups.onCreated.addListener(scheduleOpenRender);
+    chrome.tabGroups.onRemoved.addListener(scheduleOpenRender);
+  }
 }
 
 /* ------------------------------------------------------------------ *
