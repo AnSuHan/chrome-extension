@@ -18,8 +18,17 @@ side.
   keeping its name and color.
 - **New group** (`+`) — create an empty group to fill.
 - **Browse & open** — each saved group expands to show its tabs. **Click a tab to
-  open it** in the current window; **Open all** reopens the whole group bundled
-  into a native Chrome tab group with its name and color.
+  open it** in the current window; **Open all** loads the whole group as the
+  window's **active workspace** (the previous tabs are saved back into their own
+  group first, then closed). The **Open tabs** header shows a *Viewing &lt;group&gt;*
+  badge, and the active group is highlighted with a *Reopen* button.
+- **Live workspace sync** — while a group is the active workspace, browsing in it
+  (navigating, opening, closing, reordering tabs) is mirrored straight back into
+  the saved group, so it always reflects where you actually are — including the
+  URL a login flow lands on. Close *all* of a workspace's tabs and Tabinet loads
+  another group instead of letting the window (and Chrome) close.
+- **Rename / recolor inline** — **double-click a group's name** (or click the ✎)
+  to rename it right in the sidebar; **click the color dot** for a quick palette.
 - **Edit tabs right in the list**:
   - **+ Add current tab** — append the page you're on to a group.
   - **×** — delete a tab.

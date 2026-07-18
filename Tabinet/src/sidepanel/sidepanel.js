@@ -35,6 +35,10 @@ const COLOR_HEX = {
   cyan: "#06b6d4",
   orange: "#f97316",
 };
+const COLOR_NAMES = Object.keys(COLOR_HEX);
+
+// Mirrors the background worker's active-workspace map key (window -> groupId).
+const ACTIVE_KEY = "tabinet.active";
 
 const listEl = document.getElementById("group-list");
 const emptyEl = document.getElementById("empty");
@@ -45,6 +49,7 @@ const newGroupBtn = document.getElementById("new-group-btn");
 const editorBtn = document.getElementById("editor-btn");
 const openListEl = document.getElementById("open-list");
 const openCountEl = document.getElementById("open-count");
+const activeBadgeEl = document.getElementById("active-badge");
 const newTabBtn = document.getElementById("new-tab-btn");
 const ctxMenu = document.getElementById("ctx-menu");
 const dockHint = document.getElementById("dock-hint");
@@ -54,10 +59,58 @@ const dockHintClose = document.getElementById("dock-hint-close");
 // and events are scoped to it so the sidebar always mirrors its own window.
 let panelWindowId = chrome.windows.WINDOW_ID_NONE;
 
+// Resolve (and cache) this panel's window id. "Open all" needs a concrete id
+// before the first open-tab render has had a chance to set panelWindowId —
+// sending undefined used to make the workspace switch target the wrong window.
+async function ensurePanelWindowId() {
+  if (panelWindowId !== chrome.windows.WINDOW_ID_NONE) return panelWindowId;
+  try {
+    const win = await chrome.windows.getCurrent();
+    if (win?.id != null) panelWindowId = win.id;
+  } catch (e) {
+    console.error("Tabinet: window resolution failed", e);
+  }
+  return panelWindowId !== chrome.windows.WINDOW_ID_NONE ? panelWindowId : undefined;
+}
+
 const expanded = new Set(); // ids of groups shown expanded
 let cache = []; // last-rendered groups
+let activeGroupId = null; // saved group currently loaded in this window (if any)
 
 const byId = (id) => cache.find((g) => g.id === id);
+
+// Which saved group is currently loaded in this panel's window. Read straight
+// from the worker's active-workspace map in storage.local (keyed by window id).
+async function fetchActiveGroupId() {
+  if (panelWindowId === chrome.windows.WINDOW_ID_NONE) return null;
+  try {
+    const { [ACTIVE_KEY]: map } = await chrome.storage.local.get(ACTIVE_KEY);
+    return map?.[panelWindowId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Show/refresh the "currently viewing <group>" badge in the Open-tabs header.
+function renderActiveBadge() {
+  if (!activeBadgeEl) return;
+  const g = activeGroupId ? byId(activeGroupId) : null;
+  if (!g) {
+    activeBadgeEl.hidden = true;
+    activeBadgeEl.textContent = "";
+    return;
+  }
+  activeBadgeEl.hidden = false;
+  activeBadgeEl.innerHTML = "";
+  const dot = document.createElement("span");
+  dot.className = "active-badge-dot";
+  dot.style.background = COLOR_HEX[g.color] ?? COLOR_HEX.grey;
+  const label = document.createElement("span");
+  label.className = "active-badge-name";
+  label.textContent = g.name;
+  activeBadgeEl.title = `These tabs belong to the saved group "${g.name}"`;
+  activeBadgeEl.append(dot, label);
+}
 
 let toastTimer;
 function toast(msg) {
@@ -399,6 +452,96 @@ async function reorderTab(groupId, from, targetIndex, after) {
   reload();
 }
 
+/* ---- inline rename + inline recolor (edit groups without the full editor) ---- */
+
+// Swap the group-name label for a text input; commit on Enter/blur, cancel on Esc.
+function startRename(group, nameEl) {
+  if (nameEl.querySelector("input")) return; // already editing
+  const input = document.createElement("input");
+  input.className = "g-name-input";
+  input.value = group.name;
+  input.setAttribute("aria-label", "Group name");
+  nameEl.textContent = "";
+  nameEl.append(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = async (save) => {
+    if (done) return;
+    done = true;
+    const next = input.value.trim();
+    if (save && next && next !== group.name) {
+      group.name = next;
+      await updateGroup(group.id, { name: next });
+      toast(`Renamed to "${next}".`);
+    }
+    reload();
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      commit(false);
+    }
+    e.stopPropagation();
+  });
+  // Clicks inside the field shouldn't toggle/expand the group header.
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("dblclick", (e) => e.stopPropagation());
+  input.addEventListener("blur", () => commit(true));
+}
+
+let colorPickerEl = null;
+function closeColorPicker() {
+  colorPickerEl?.remove();
+  colorPickerEl = null;
+}
+
+// A small floating swatch palette anchored under the group's color dot.
+function openColorPicker(group, anchor) {
+  closeColorPicker();
+  const menu = document.createElement("div");
+  menu.className = "color-picker";
+  for (const c of COLOR_NAMES) {
+    const sw = document.createElement("button");
+    sw.type = "button";
+    sw.className = "swatch" + (c === group.color ? " current" : "");
+    sw.style.background = COLOR_HEX[c];
+    sw.title = c;
+    sw.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      closeColorPicker();
+      if (c === group.color) return;
+      group.color = c;
+      await updateGroup(group.id, { color: c });
+      reload();
+    });
+    menu.append(sw);
+  }
+  document.body.append(menu);
+  colorPickerEl = menu;
+
+  const r = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  menu.style.left = Math.min(r.left, window.innerWidth - w - 6) + "px";
+  menu.style.top =
+    Math.min(r.bottom + 4, window.innerHeight - h - 6) + "px";
+}
+
+// Dismiss the palette on any outside click / scroll / Escape.
+window.addEventListener("click", (e) => {
+  if (colorPickerEl && !e.target.closest(".color-picker")) closeColorPicker();
+});
+document.addEventListener("scroll", closeColorPicker, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeColorPicker();
+});
+
 async function moveTab(fromId, index, toId) {
   if (fromId === toId) return;
   const from = byId(fromId);
@@ -468,25 +611,61 @@ function buildTab(group, tab, index) {
 }
 
 function buildGroup(group) {
+  const isActive = group.id === activeGroupId;
   const li = document.createElement("li");
-  li.className = "group" + (expanded.has(group.id) ? " open" : "");
+  li.className =
+    "group" +
+    (expanded.has(group.id) ? " open" : "") +
+    (isActive ? " active" : "");
 
-  const head = document.createElement("button");
+  // A div (not a <button>) so the inline rename <input> can live inside the
+  // header without nesting interactive content in a button.
+  const head = document.createElement("div");
   head.className = "g-head";
-  head.type = "button";
+  head.setAttribute("role", "button");
+  head.tabIndex = 0;
   head.dataset.gid = group.id;
 
   const caret = document.createElement("span");
   caret.className = "caret";
   caret.textContent = "▶";
 
+  // Clicking the color dot opens a small palette to recolor the group inline.
   const dot = document.createElement("span");
   dot.className = "g-dot";
   dot.style.background = COLOR_HEX[group.color] ?? COLOR_HEX.grey;
+  dot.setAttribute("role", "button");
+  dot.title = "Change color";
+  dot.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openColorPicker(group, dot);
+  });
 
+  // The name is inline-editable: double-click (or the ✎ affordance) turns it
+  // into a text field so a group can be renamed without opening the editor.
   const name = document.createElement("span");
   name.className = "g-name";
   name.textContent = group.name;
+  name.title = group.name;
+  // Double-click the name to rename (the ✎ affordance does the same). Suppress
+  // the click that would otherwise bubble to the header and toggle it.
+  name.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    startRename(group, name);
+  });
+  name.addEventListener("mousedown", (e) => {
+    if (e.detail > 1) e.preventDefault(); // stop text-selection on dbl-click
+  });
+
+  const rename = document.createElement("span");
+  rename.className = "g-rename";
+  rename.textContent = "✎";
+  rename.setAttribute("role", "button");
+  rename.title = "Rename group";
+  rename.addEventListener("click", (e) => {
+    e.stopPropagation();
+    startRename(group, name);
+  });
 
   const count = document.createElement("span");
   count.className = "g-count";
@@ -494,19 +673,21 @@ function buildGroup(group) {
 
   const restore = document.createElement("span");
   restore.className = "g-restore";
-  restore.textContent = "Open all";
+  restore.textContent = isActive ? "Reopen" : "Open all";
   restore.setAttribute("role", "button");
-  restore.addEventListener("click", (e) => {
+  restore.addEventListener("click", async (e) => {
     e.stopPropagation();
     if (group.tabs.length === 0) return;
     // Workspace switch: back up the current tabs and replace them with this
     // group's tabs. `switch` + windowId tell the worker to close the old tabs.
+    // Resolve the window id first so a not-yet-mirrored panel never sends an
+    // undefined window (which made the switch act on the wrong window / no-op).
+    const windowId = await ensurePanelWindowId();
     send({
       type: "RESTORE_GROUP",
       id: group.id,
       switch: true,
-      windowId:
-        panelWindowId !== chrome.windows.WINDOW_ID_NONE ? panelWindowId : undefined,
+      windowId,
     });
     toast(`Switching to "${group.name}"…`);
   });
@@ -526,11 +707,32 @@ function buildGroup(group) {
     reload();
   });
 
-  head.append(caret, dot, name, count, restore, del);
-  head.addEventListener("click", () => {
+  head.append(caret, dot, name, rename, count, restore, del);
+
+  const toggle = () => {
     if (expanded.has(group.id)) expanded.delete(group.id);
     else expanded.add(group.id);
     render(cache);
+  };
+  // Clicking the header expands/collapses it. On the name specifically we defer
+  // briefly so a double-click (rename) can cancel the toggle before it re-renders
+  // and tears the freshly-created input out of the DOM.
+  let deferred;
+  head.addEventListener("click", (e) => {
+    if (e.target.closest(".g-name-input")) return; // typing in the rename field
+    if (e.target.closest(".g-name")) {
+      clearTimeout(deferred);
+      deferred = setTimeout(toggle, 200);
+    } else {
+      toggle();
+    }
+  });
+  head.addEventListener("dblclick", () => clearTimeout(deferred));
+  head.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle();
+    }
   });
   li.append(head);
 
@@ -568,10 +770,16 @@ function render(groups) {
   listEl.innerHTML = "";
   emptyEl.hidden = groups.length > 0;
   for (const group of groups) listEl.append(buildGroup(group));
+  renderActiveBadge();
 }
 
 async function reload() {
-  render(await getGroups());
+  const [groups, active] = await Promise.all([
+    getGroups(),
+    fetchActiveGroupId(),
+  ]);
+  activeGroupId = active;
+  render(groups);
 }
 
 /* ------------------------------------------------------------------ *
@@ -686,9 +894,24 @@ newGroupBtn.addEventListener("click", async () => {
 editorBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 // Keep the panel live: re-render when groups change (saves, edits in the editor,
-// sync updates from another device).
+// sync updates from another device, the active-workspace map, or the live-sync
+// that mirrors the open window into its group). Debounced because live-sync can
+// write in quick bursts as the user browses.
+let reloadTimer;
+function scheduleReload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    // Don't yank a rename field out from under the user mid-edit; a re-render
+    // would destroy the input (and its blur would commit early). Try again soon.
+    if (document.activeElement?.classList?.contains("g-name-input")) {
+      scheduleReload();
+      return;
+    }
+    reload();
+  }, 120);
+}
 chrome.storage.onChanged.addListener((_changes, areaName) => {
-  if (areaName === "local" || areaName === "sync") reload();
+  if (areaName === "local" || areaName === "sync") scheduleReload();
 });
 
 /* ------------------------------------------------------------------ *
@@ -717,7 +940,10 @@ async function initDockHint() {
  * Startup
  * ------------------------------------------------------------------ */
 
-function init() {
+async function init() {
+  // Resolve the host window up front so the active-workspace badge and the
+  // "Open all" switch always have a concrete window id to work with.
+  await ensurePanelWindowId();
   wireOpenTabEvents();
   renderOpenTabs();
   reload();
