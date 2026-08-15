@@ -23,7 +23,13 @@ const OLD_KEY = "tabinet.groups"; // legacy single-array format (local only)
 const INDEX_KEY = "tabinet.order"; // array of group ids, in display order
 const GROUP_PREFIX = "tabinet.g."; // per-group item key prefix
 const SETTINGS_KEY = "tabinet.settings";
-const DEFAULT_SETTINGS = { area: "local" };
+// keepLoaded — the default answer to "should a workspace stay live in the
+// window after you switch away?" Live workspaces are native Chrome tab groups,
+// which is what makes switching back reload-free, but Chrome lists every live
+// tab group in the bookmarks bar. Off, Tabinet creates no tab groups at all
+// (nothing in the bookmarks bar) and workspaces reopen lazily on return.
+// Individual groups may override it (see resolveKeepLoaded).
+const DEFAULT_SETTINGS = { area: "local", keepLoaded: true };
 
 const groupKey = (id) => GROUP_PREFIX + id;
 
@@ -41,6 +47,21 @@ async function patchSettings(patch) {
   const next = { ...(await getSettings()), ...patch };
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
   return next;
+}
+
+/** Patch settings other than the storage area (use setArea for that). */
+export async function updateSettings(patch) {
+  const { area: _ignored, ...rest } = patch ?? {};
+  return patchSettings(rest);
+}
+
+/**
+ * Does this group stay live in the window after you switch away?
+ * A group's own `keepLoaded` wins; absent, it follows the global setting.
+ */
+export function resolveKeepLoaded(group, settings) {
+  if (typeof group?.keepLoaded === "boolean") return group.keepLoaded;
+  return settings?.keepLoaded ?? DEFAULT_SETTINGS.keepLoaded;
 }
 
 function storeFor(areaName) {
@@ -134,8 +155,10 @@ export async function renameGroup(id, name) {
 }
 
 /**
- * Patch a group by id. Accepts any of { name, color, tabs }.
- * Tabs, if provided, are normalized to { title, url } records.
+ * Patch a group by id. Accepts any of { name, color, tabs, keepLoaded }.
+ * Tabs, if provided, are normalized to { title, url } records. Passing
+ * keepLoaded as anything but a boolean (e.g. null) clears the per-group
+ * override so the group follows the global setting again.
  */
 export async function updateGroup(id, patch = {}) {
   const store = await area();
@@ -147,6 +170,10 @@ export async function updateGroup(id, patch = {}) {
     updated.name = patch.name.trim() || current.name;
   }
   if (typeof patch.color === "string") updated.color = patch.color;
+  if ("keepLoaded" in patch) {
+    if (typeof patch.keepLoaded === "boolean") updated.keepLoaded = patch.keepLoaded;
+    else delete updated.keepLoaded;
+  }
   if (Array.isArray(patch.tabs)) {
     updated.tabs = patch.tabs.map((t) => ({
       title: t.title ?? "",
@@ -174,7 +201,7 @@ export async function reorderGroups(orderedIds) {
 /** Normalize an arbitrary object into a valid saved-group record. */
 function coerceGroup(raw) {
   if (!raw || !Array.isArray(raw.tabs)) return null;
-  return {
+  const group = {
     id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
     name: (typeof raw.name === "string" && raw.name.trim()) || "Untitled group",
     color: typeof raw.color === "string" ? raw.color : "grey",
@@ -183,6 +210,9 @@ function coerceGroup(raw) {
       .filter((t) => t && typeof t.url === "string")
       .map((t) => ({ title: t.title ?? "", url: t.url })),
   };
+  // Only carried when the group overrides the global setting.
+  if (typeof raw.keepLoaded === "boolean") group.keepLoaded = raw.keepLoaded;
+  return group;
 }
 
 /**

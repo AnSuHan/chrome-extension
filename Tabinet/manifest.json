@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Tabinet",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Group, save, and restore your tabs — Safari-style tab groups for Chrome.",
   "minimum_chrome_version": "114",
   "permissions": ["tabs", "tabGroups", "storage", "downloads", "sidePanel"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Tabinet — open the tab-groups sidebar",
     "default_icon": {

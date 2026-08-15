@@ -20,6 +20,7 @@ import {
   reorderGroups,
   setArea,
   updateGroup,
+  updateSettings,
 } from "../lib/storage.js";
 
 const CHROME_COLORS = [
@@ -52,6 +53,7 @@ const toastEl = document.getElementById("toast");
 
 let state = []; // groups, in order
 let selectedId = null;
+let globalKeepLoaded = true; // the setting a group's "Default" resolves to
 
 const byId = (id) => state.find((g) => g.id === id);
 const selectedGroup = () => byId(selectedId);
@@ -246,6 +248,35 @@ function renderDetail() {
     renderSidebar();
   });
 
+  // Whether this workspace keeps running after you switch away. Live ones
+  // switch back instantly; the price is that Chrome lists every live tab group
+  // in the bookmarks bar. "Default" follows the global setting on the left.
+  const keep = document.createElement("select");
+  keep.className = "color-select keep-select";
+  keep.title =
+    "Live: this workspace keeps running as a Chrome tab group when you switch " +
+    "away (instant to come back to, but Chrome shows it in the bookmarks bar). " +
+    "Close on switch: its tabs are saved and closed, leaving nothing behind.";
+  const current =
+    typeof group.keepLoaded === "boolean" ? (group.keepLoaded ? "on" : "off") : "";
+  for (const [value, label] of [
+    ["", `Default (${globalKeepLoaded ? "live" : "close on switch"})`],
+    ["on", "Keep live"],
+    ["off", "Close on switch"],
+  ]) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (value === current) opt.selected = true;
+    keep.append(opt);
+  }
+  keep.addEventListener("change", async () => {
+    const next = keep.value === "" ? null : keep.value === "on";
+    if (next === null) delete group.keepLoaded;
+    else group.keepLoaded = next;
+    await updateGroup(group.id, { keepLoaded: next });
+  });
+
   const actions = document.createElement("div");
   actions.className = "head-actions";
 
@@ -271,7 +302,7 @@ function renderDetail() {
   });
 
   actions.append(restore, del);
-  head.append(color, name, actions);
+  head.append(color, name, keep, actions);
   inner.append(head);
 
   // --- tabs ---
@@ -491,10 +522,26 @@ document.getElementById("new-group-btn").addEventListener("click", async () => {
 });
 
 const syncToggle = document.getElementById("sync-toggle");
+const keepLoadedToggle = document.getElementById("keep-loaded-toggle");
 
-async function refreshSyncToggle() {
-  syncToggle.checked = (await getSettings()).area === "sync";
+async function refreshSettingsToggles() {
+  const settings = await getSettings();
+  syncToggle.checked = settings.area === "sync";
+  globalKeepLoaded = settings.keepLoaded !== false;
+  keepLoadedToggle.checked = globalKeepLoaded;
+  renderDetail(); // the per-group "Default (…)" label depends on it
 }
+
+keepLoadedToggle.addEventListener("change", async () => {
+  globalKeepLoaded = keepLoadedToggle.checked;
+  await updateSettings({ keepLoaded: globalKeepLoaded });
+  renderDetail(); // the per-group selector shows what "Default" resolves to
+  toast(
+    keepLoadedToggle.checked
+      ? "Workspaces stay live in the background — Chrome shows them in the bookmarks bar."
+      : "Workspaces close when you switch away — nothing left in the bookmarks bar.",
+  );
+});
 
 syncToggle.addEventListener("change", async () => {
   const target = syncToggle.checked ? "sync" : "local";
@@ -563,5 +610,5 @@ importFile.addEventListener("change", async () => {
   }
 });
 
-refreshSyncToggle();
+refreshSettingsToggles();
 reload();

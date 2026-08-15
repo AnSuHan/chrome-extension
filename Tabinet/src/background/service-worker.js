@@ -14,14 +14,27 @@
  *   browser window (which would otherwise show up in Alt+Tab / the taskbar).
  *   A per-window LRU cap bounds how many workspaces stay loaded at once so
  *   memory can't grow without limit; evicted ones reopen lazily on return.
+ *
+ *   Whenever a workspace comes into view, its still-unloaded (placeholder) tabs
+ *   are pre-warmed from here — see src/background/prewarm.js — so clicking one
+ *   opens an already-signed-in page almost immediately.
+ *
+ *   Staying live costs visibility: Chrome lists every live tab group in the
+ *   bookmarks bar. So "stay live" is a setting — global, with a per-workspace
+ *   override (storage.js resolveKeepLoaded). A workspace that doesn't stay live
+ *   never becomes a tab group at all: its tabs are plain tabs while you're in
+ *   it, and are saved and closed when you switch away, leaving nothing behind.
  */
 
+import { cancelWarm, warmUrls } from "./prewarm.js";
 import {
   addGroup,
   getGroups,
+  getSettings,
   importGroups,
   removeGroup,
   renameGroup,
+  resolveKeepLoaded,
   updateGroup,
 } from "../lib/storage.js";
 
@@ -101,7 +114,8 @@ function lazyUrl(tab) {
  * urls instead of dropping every not-yet-loaded tab.
  */
 function effectiveTab(tab) {
-  const u = tab.url ?? "";
+  // A freshly created tab may still carry its target in pendingUrl only.
+  const u = tab.url || tab.pendingUrl || "";
   if (u.startsWith(LAZY_PAGE)) {
     try {
       const p = new URL(u).searchParams;
@@ -156,6 +170,21 @@ async function clearActiveGroup(windowId) {
 // new-tab adoption, or emptied-workspace handling (that would write a half-open
 // set into the wrong group, or re-enter the switch).
 const switching = new Set();
+
+/**
+ * Run `fn` with the window marked as mid-switch, so the tab churn it causes
+ * can't trigger live-sync or new-tab adoption. Nests safely: if the window is
+ * already guarded, only the outermost holder releases it.
+ */
+async function withSwitchGuard(windowId, fn) {
+  const held = !switching.has(windowId);
+  if (held) switching.add(windowId);
+  try {
+    return await fn();
+  } finally {
+    if (held) switching.delete(windowId);
+  }
+}
 
 /* ------------------------------------------------------------------ *
  * Workspace ↔ native-tab-group bookkeeping
@@ -221,6 +250,7 @@ async function touchWorkspaceOrder(windowId, savedId) {
 
 // Forget all bookkeeping for a closed window.
 async function cleanupWindow(windowId) {
+  cancelWarm(`win:${windowId}`);
   const mapAll = await getAllWs(WS_MAP_KEY);
   if (windowId in mapAll) {
     delete mapAll[windowId];
@@ -256,15 +286,21 @@ async function setLoadedGroupId(windowId, savedId, gid) {
 }
 
 /**
- * Open a saved workspace as a fresh native tab group in `windowId`.
+ * Open a saved workspace in `windowId`.
  *
  * Tabs open onto a tiny LOCAL placeholder page (see src/lazy/lazy.js) instead
  * of their real URL, so a big workspace appears instantly with zero network
- * load; each tab navigates to its real URL only when first viewed. The tabs are
- * then bundled into one native tab group titled/colored like the workspace.
- * Returns { gid, tabIds } (gid null if nothing could be opened).
+ * load; each tab navigates to its real URL only when first viewed.
+ *
+ * With `grouped` (the default) the tabs are bundled into one native tab group
+ * titled/colored like the workspace — that group is what lets the workspace
+ * stay live in the background later. Without it they stay plain tabs, so the
+ * workspace leaves no trace in the tab strip or the bookmarks bar; the cost is
+ * that switching away has to close them (it reopens lazily on return).
+ *
+ * Returns { gid, tabIds } — gid is null when ungrouped, or if nothing opened.
  */
-async function openWorkspaceGroup(group, windowId) {
+async function openWorkspaceGroup(group, windowId, { grouped = true } = {}) {
   const created = await Promise.all(
     group.tabs.map((tab) =>
       chrome.tabs
@@ -274,7 +310,7 @@ async function openWorkspaceGroup(group, windowId) {
     ),
   );
   const tabIds = created.filter((id) => id != null);
-  if (!tabIds.length) return { gid: null, tabIds: [] };
+  if (!tabIds.length || !grouped) return { gid: null, tabIds };
 
   let gid = null;
   try {
@@ -292,13 +328,49 @@ async function openWorkspaceGroup(group, windowId) {
 }
 
 /**
- * Ensure the outgoing active workspace's tabs are inside its native group, so
- * we can collapse them out of sight. Any stray ungrouped tabs in the window
- * (e.g. plain new tabs) are folded into that group too. Returns the group id.
+ * A workspace just came into view: request its not-yet-loaded pages in the
+ * background so the session/cookies, DNS/TLS and document cache are warm before
+ * the user clicks a tab — the click then lands on a signed-in page almost
+ * immediately instead of running the whole login redirect chain.
+ *
+ * Its tabs are identified by native group (`gid`) or, for a workspace running
+ * ungrouped, by the ids we just opened (`tabIds`); with neither we fall back to
+ * the saved urls. Only tabs still on the lazy placeholder are warmed — anything
+ * already showing a real page needs nothing, and `skipTabId` drops the tab we
+ * just activated, which is loading itself.
+ *
+ * Fire-and-forget: a switch must never wait on the network. Keyed per window,
+ * so switching again cancels the previous window's warm run.
  */
-async function ensureWorkspaceGrouped(windowId, group) {
-  const ungrouped = await chrome.tabs.query({ windowId, groupId: NONE });
-  const strayIds = ungrouped.map((t) => t.id).filter((id) => id != null);
+function prewarmWorkspace(
+  windowId,
+  { gid = null, tabIds = null, group = null, skipTabId = null } = {},
+) {
+  (async () => {
+    let tabs = [];
+    if (gid != null) {
+      tabs = await chrome.tabs.query({ windowId, groupId: gid }).catch(() => []);
+    } else if (tabIds?.length) {
+      tabs = await tabsByIds(tabIds);
+    }
+    const urls = tabs.length
+      ? tabs
+          .filter((t) => t.id !== skipTabId)
+          .filter((t) => (t.url || t.pendingUrl || "").startsWith(LAZY_PAGE))
+          .map((t) => effectiveTab(t).url)
+      : (group?.tabs ?? []).map((t) => t.url ?? "");
+    if (urls.length) await warmUrls(urls, { key: `win:${windowId}` });
+  })().catch((e) => console.warn("Tabinet prewarmWorkspace:", e));
+}
+
+/**
+ * Ensure the outgoing active workspace's tabs are inside its native group, so
+ * we can collapse them out of sight. `strayIds` are the window's ungrouped tabs
+ * as they were before the switch started (plain new tabs, or the whole
+ * workspace if it was running ungrouped); they get folded into the group too.
+ * Returns the group id.
+ */
+async function ensureWorkspaceGrouped(windowId, group, strayIds = []) {
   let gid = await loadedGroupId(windowId, group.id);
 
   if (gid != null) {
@@ -327,7 +399,22 @@ async function ensureWorkspaceGrouped(windowId, group) {
   return gid;
 }
 
-// Close a loaded workspace's tabs and forget its group (reopens lazily later).
+/** Look up tabs by id, dropping any that closed in the meantime. */
+async function tabsByIds(ids) {
+  const tabs = await Promise.all(
+    ids.map((id) => chrome.tabs.get(id).catch(() => null)),
+  );
+  return tabs.filter(Boolean);
+}
+
+/**
+ * Close a workspace's tabs and dissolve its native group.
+ *
+ * The ungroup matters: emptying a group by closing its tabs is "close group" to
+ * Chrome, which keeps the group saved and leaves a chip sitting in the
+ * bookmarks bar forever. Ungrouping first deletes the group outright, so an
+ * evicted or deleted workspace leaves nothing behind.
+ */
 async function closeWorkspaceTabs(windowId, savedId) {
   const gid = (await getWsMap(windowId))[savedId];
   await setLoadedGroupId(windowId, savedId, null);
@@ -336,6 +423,43 @@ async function closeWorkspaceTabs(windowId, savedId) {
   if (gid == null) return;
   const tabs = await chrome.tabs.query({ windowId, groupId: gid }).catch(() => []);
   const ids = tabs.map((t) => t.id).filter((id) => id != null);
+  if (!ids.length) return;
+  // Guarded: between the ungroup and the close these tabs sit ungrouped, and an
+  // unguarded live-sync would read them as the active workspace's tabs.
+  await withSwitchGuard(windowId, async () => {
+    await chrome.tabs.ungroup(ids).catch(() => {});
+    await chrome.tabs.remove(ids).catch(() => {});
+  });
+}
+
+/**
+ * Take the outgoing workspace out of the window entirely (the "doesn't stay
+ * live" path): save what its tabs currently show — live sync is paused during a
+ * switch, so this is the last chance to record them — then dissolve its group
+ * and close them. Nothing of it remains in the tab strip or the bookmarks bar;
+ * it reopens lazily the next time you switch to it.
+ *
+ * `gid` is its native group (null if it was running ungrouped) and `strayIds`
+ * the window's ungrouped tabs captured before the switch began.
+ */
+async function unloadWorkspace(windowId, savedId, gid, strayIds = []) {
+  const grouped =
+    gid != null
+      ? await chrome.tabs.query({ windowId, groupId: gid }).catch(() => [])
+      : [];
+  const strays = await tabsByIds(strayIds);
+  const snap = snapshotTabs([...grouped, ...strays]);
+  if (snap.length) await updateGroup(savedId, { tabs: snap });
+
+  await setLoadedGroupId(windowId, savedId, null);
+  await setWsOrder(
+    windowId,
+    (await getWsOrder(windowId)).filter((s) => s !== savedId),
+  );
+
+  const groupedIds = grouped.map((t) => t.id).filter((id) => id != null);
+  if (groupedIds.length) await chrome.tabs.ungroup(groupedIds).catch(() => {});
+  const ids = [...groupedIds, ...strays.map((t) => t.id).filter((id) => id != null)];
   if (ids.length) await chrome.tabs.remove(ids).catch(() => {});
 }
 
@@ -374,10 +498,11 @@ async function persistUnsavedTabs(current, groups) {
 
 /**
  * Switch a window to a saved workspace (Safari-style):
+ *  0. capture what belongs to the OUTGOING workspace before anything new opens,
  *  1. bring the target workspace into view — reuse its already-loaded native
  *     group (expand it → zero reload) when present, else open it fresh,
- *  2. hide the OUTGOING workspace by collapsing its native group (its tabs are
- *     kept alive, just not visible), grouping any stray ungrouped tabs first,
+ *  2. get the outgoing workspace out of sight: collapse its native group if it
+ *     stays live (its tabs keep running), otherwise save and close it,
  *  3. bound memory by evicting least-recently-used loaded workspaces,
  *  4. remember the target as this window's active workspace.
  */
@@ -396,43 +521,70 @@ async function switchToGroup(id, windowId) {
   if (prevId === id) {
     // Already active — just make sure it's expanded and focused.
     const gid = await loadedGroupId(windowId, id);
-    if (gid != null) await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
+    if (gid != null) {
+      await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
+    }
+    prewarmWorkspace(windowId, { gid, group }); // top up any still-cold tabs
     return;
   }
 
   switching.add(windowId);
   try {
+    const settings = await getSettings();
+    const prevGroup = prevId ? groups.find((g) => g.id === prevId) : null;
+
+    // 0) Everything ungrouped right now belongs to the outgoing workspace —
+    //    a plain new tab, or its whole tab set if it was running ungrouped.
+    //    Capture it BEFORE opening the target, whose tabs may be ungrouped too
+    //    and would otherwise be indistinguishable from it.
+    const prevGid = prevGroup ? await loadedGroupId(windowId, prevId) : null;
+    const strayTabs = await chrome.tabs.query({ windowId, groupId: NONE });
+    const strayIds = strayTabs.map((t) => t.id).filter((tid) => tid != null);
+
     // 1) Bring the target into view: reuse its loaded group (no reload) or open.
     let gid = await loadedGroupId(windowId, id);
+    let openedIds = null;
     let firstTabId = null;
     if (gid != null) {
       await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
       const tabs = await chrome.tabs.query({ windowId, groupId: gid });
       firstTabId = tabs[0]?.id ?? null;
     } else {
-      const opened = await openWorkspaceGroup(group, windowId);
+      const opened = await openWorkspaceGroup(group, windowId, {
+        grouped: resolveKeepLoaded(group, settings),
+      });
       gid = opened.gid;
+      openedIds = opened.tabIds;
       firstTabId = opened.tabIds[0] ?? null;
     }
     if (firstTabId != null) {
       await chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
     }
+    // Warm the rest in the background while the user looks at the first tab.
+    prewarmWorkspace(windowId, {
+      gid,
+      tabIds: openedIds,
+      group,
+      skipTabId: firstTabId,
+    });
 
-    // 2) Hide the outgoing workspace. If it's a tracked workspace, group its
-    //    (now-ungrouped) tabs and collapse them out of sight. Otherwise the
-    //    ungrouped tabs are unsaved scratch — back them up and clear them.
-    if (prevId && groups.some((g) => g.id === prevId)) {
-      const prevGroup = groups.find((g) => g.id === prevId);
-      const prevGid = await ensureWorkspaceGrouped(windowId, prevGroup);
-      if (prevGid != null) {
-        await chrome.tabGroups.update(prevGid, { collapsed: true }).catch(() => {});
-        await touchWorkspaceOrder(windowId, prevId);
+    // 2) Get the outgoing workspace out of sight. A tracked workspace either
+    //    stays live (grouped + collapsed, so switching back is instant) or is
+    //    saved and closed, leaving no tab group behind. Untracked ungrouped
+    //    tabs are unsaved scratch — back them up and clear them.
+    if (prevGroup) {
+      if (resolveKeepLoaded(prevGroup, settings)) {
+        const pgid = await ensureWorkspaceGrouped(windowId, prevGroup, strayIds);
+        if (pgid != null) {
+          await chrome.tabGroups.update(pgid, { collapsed: true }).catch(() => {});
+          await touchWorkspaceOrder(windowId, prevId);
+        }
+      } else {
+        await unloadWorkspace(windowId, prevId, prevGid, strayIds);
       }
     } else {
-      const ungrouped = await chrome.tabs.query({ windowId, groupId: NONE });
-      await persistUnsavedTabs(snapshotTabs(ungrouped), groups);
-      const ids = ungrouped.map((t) => t.id).filter((tid) => tid != null);
-      if (ids.length) await chrome.tabs.remove(ids).catch(() => {});
+      await persistUnsavedTabs(snapshotTabs(strayTabs), groups);
+      if (strayIds.length) await chrome.tabs.remove(strayIds).catch(() => {});
     }
 
     // 3) Mark target most-recent, then enforce the memory cap.
@@ -526,6 +678,7 @@ async function handleEmptiedWorkspace(windowId, activeId) {
       if (tabs[0]?.id != null) {
         await chrome.tabs.update(tabs[0].id, { active: true }).catch(() => {});
       }
+      prewarmWorkspace(windowId, { gid, skipTabId: tabs[0]?.id ?? null });
       await touchWorkspaceOrder(windowId, nextId);
       await setActiveGroup(windowId, nextId);
       return;
@@ -535,10 +688,18 @@ async function handleEmptiedWorkspace(windowId, activeId) {
     const groups = await getGroups();
     const next = groups.find((g) => g.id !== activeId && g.tabs.length > 0);
     if (next) {
-      const { tabIds } = await openWorkspaceGroup(next, windowId);
+      const { gid, tabIds } = await openWorkspaceGroup(next, windowId, {
+        grouped: resolveKeepLoaded(next, await getSettings()),
+      });
       if (tabIds[0] != null) {
         await chrome.tabs.update(tabIds[0], { active: true }).catch(() => {});
       }
+      prewarmWorkspace(windowId, {
+        gid,
+        tabIds,
+        group: next,
+        skipTabId: tabIds[0] ?? null,
+      });
       await touchWorkspaceOrder(windowId, next.id);
       await setActiveGroup(windowId, next.id);
     } else {

@@ -281,6 +281,14 @@ body {
   accent-color: var(--accent);
 }
 
+.foot-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
 .io-row {
   display: flex;
   gap: 6px;
@@ -352,6 +360,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 6px;
+}
+
+.keep-select {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 6px 4px;
 }
 
 .name-input {

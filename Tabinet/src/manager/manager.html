@@ -32,6 +32,17 @@
             <input id="sync-toggle" type="checkbox" />
             Sync across devices
           </label>
+          <label
+            class="sync-toggle"
+            title="On: the workspace you leave keeps running as a Chrome tab group, so switching back is instant — but Chrome lists every live tab group in the bookmarks bar. Off: Tabinet never creates tab groups, so nothing appears in the bookmarks bar; workspaces reopen (pre-warmed) when you switch back. Individual workspaces can override this."
+          >
+            <input id="keep-loaded-toggle" type="checkbox" />
+            Keep workspaces live in the background
+          </label>
+          <p class="foot-hint">
+            Chrome's own bookmarks bar row can be hidden entirely: right-click
+            the bookmarks bar and uncheck <b>Show tab groups</b>.
+          </p>
           <div class="io-row">
             <select id="import-mode" title="How Load JSON applies the file">
               <option value="merge">Merge</option>

@@ -3,6 +3,9 @@
 **Tab + Cabinet** — group, save, and restore your tabs. A Safari-style tab-group
 manager for Chrome (Manifest V3).
 
+Current version: **1.0.0** — see [CHANGELOG.md](CHANGELOG.md) for the release
+history and known limitations.
+
 ## What it does
 
 Two surfaces: a **docked side panel** for everyday use, and a **full-page editor**
@@ -53,6 +56,19 @@ Options):
   file, and load one back in either **Merge** (append) or **Replace all** mode.
 - **Sync across devices** — toggle to move storage from this device to your
   Google account so groups appear on every Chrome you're signed into.
+- **Keep workspaces live in the background** (on by default) — the workspace
+  you switch away from keeps running as a Chrome tab group, so
+  switching back is instant — but Chrome lists every live tab group in the
+  **bookmarks bar**. Turn it off and Tabinet creates no tab groups at all:
+  nothing shows up in the bookmarks bar (or the tab strip), and workspaces
+  reopen — pre-warmed — when you switch back. Each group's header has a
+  **Default / Keep live / Close on switch** selector to override it per
+  workspace.
+
+  The bookmarks-bar row is Chrome's own feature, so no extension can hide it:
+  to remove it entirely, right-click the bookmarks bar and uncheck **Show tab
+  groups**. Chips left over from earlier sessions stay until you right-click
+  and delete them once.
 
 By default everything is stored locally via `chrome.storage.local`; nothing
 leaves the browser. JSON files are the explicit save/backup format.
@@ -111,6 +127,7 @@ Requires Chrome 114+ (Side Panel API).
 | `storage`   | Persist saved groups (local and, if enabled, sync). |
 | `downloads` | Write the JSON file when you Save your groups. |
 | `sidePanel` | Show the docked sidebar and open it from the toolbar icon. |
+| host access (`http`/`https`) | Pre-warm a workspace's pages when you switch to it, so clicking a tab opens an already-signed-in page almost instantly. Tabinet only requests pages you saved yourself; nothing is sent anywhere. |
 
 ## Roadmap
 
