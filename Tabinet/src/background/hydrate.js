@@ -40,9 +40,16 @@ const HYDRATE_TIMEOUT_MS = 30_000;
 // 200-tab workspace can't eat the machine's memory on a single switch.
 const MAX_HYDRATE_PER_RUN = 60;
 
+// A tab we just opened needs a moment before its placeholder page is running
+// and has connected back to us. Asking it to load before that would fall
+// through to navigating the tab ourselves, which leaves the placeholder in the
+// tab's history — so we give the port a short grace period to show up.
+const PORT_WAIT_MS = 3_000;
+
 const runs = new Map(); // key -> run state of the run currently owning the key
 const waiting = new Map(); // tabId -> callback that releases the lane holding it
 const ports = new Map(); // tabId -> the live placeholder page's port
+const portWaiters = new Map(); // tabId -> callbacks waiting for that port
 
 // Every placeholder page opens a port back to us as it loads; that port is how
 // we tell it to go to its real URL. A port (rather than a one-off message) is
@@ -53,10 +60,32 @@ chrome.runtime.onConnect.addListener((port) => {
   const tabId = port.sender?.tab?.id;
   if (tabId == null) return;
   ports.set(tabId, port);
+  const waiters = portWaiters.get(tabId);
+  if (waiters) {
+    portWaiters.delete(tabId);
+    for (const resolve of waiters) resolve(port);
+  }
   port.onDisconnect.addListener(() => {
     if (ports.get(tabId) === port) ports.delete(tabId);
   });
 });
+
+/** The tab's placeholder port, waiting a moment for a just-opened tab to connect. */
+function waitForPort(tabId) {
+  const open = ports.get(tabId);
+  if (open) return Promise.resolve(open);
+  return new Promise((resolve) => {
+    const done = (port) => {
+      clearTimeout(timer);
+      portWaiters.get(tabId)?.delete(done);
+      resolve(port);
+    };
+    const timer = setTimeout(() => done(null), PORT_WAIT_MS);
+    const waiters = portWaiters.get(tabId) ?? new Set();
+    waiters.add(done);
+    portWaiters.set(tabId, waiters);
+  });
+}
 
 /** Release whoever is waiting on `tabId` (loaded, closed, or timed out). */
 function settle(tabId) {
@@ -111,7 +140,7 @@ async function startNavigation(tabId, fallbackUrl) {
   // also what keeps a re-run from reloading tabs an earlier run finished.
   if (!current.startsWith(LAZY_PAGE)) return false;
 
-  const port = ports.get(tabId);
+  const port = await waitForPort(tabId);
   if (port) {
     try {
       port.postMessage({ type: "TABINET_LOAD_NOW" });
