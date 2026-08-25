@@ -28,7 +28,12 @@ fs.mkdirSync(tmp, { recursive: true });
 fs.cpSync(path.join(here, "..", "src"), path.join(tmp, "src"), { recursive: true });
 fs.writeFileSync(path.join(tmp, "package.json"), '{ "type": "module" }\n');
 
-const suites = ["hydrate.test.mjs", "lazy.test.mjs", "worker.test.mjs"];
+const suites = [
+  "hydrate.test.mjs",
+  "lazy.test.mjs",
+  "snapshot.test.mjs",
+  "worker.test.mjs",
+];
 let failed = 0;
 for (const suite of suites) {
   console.log(`\n${suite}`);

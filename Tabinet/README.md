@@ -65,6 +65,14 @@ Options):
   **Default / Keep live / Close on switch** selector to override it per
   workspace.
 
+- **Auto-save where tabs navigate** (on by default) — when a tab in the active
+  workspace goes somewhere new, the saved workspace follows it, so it reopens
+  where you left off. Off, every saved tab keeps the URL it was saved with.
+- **Auto-save tabs you add or close** (on by default) — tabs you open or close
+  in the active workspace are added to / removed from the saved workspace. Off,
+  the workspace keeps the number of tabs you saved it with; the option above
+  still records where those tabs go. Turn both off and a saved workspace is
+  frozen until you save over it deliberately.
 - **Pre-load tabs when a workspace opens** (on by default) — opening a
   workspace loads all of its tabs in the background, a few at a time, inside
   that one window. By the time you click a tab it is already on its real,

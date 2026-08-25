@@ -46,6 +46,20 @@
             <input id="preload-toggle" type="checkbox" />
             Pre-load tabs when a workspace opens
           </label>
+          <label
+            class="sync-toggle"
+            title="On: when a tab in the active workspace navigates, the saved workspace follows it, so it reopens where you left off. Off: each saved tab keeps the URL it was saved with."
+          >
+            <input id="autosave-changes-toggle" type="checkbox" />
+            Auto-save where tabs navigate
+          </label>
+          <label
+            class="sync-toggle"
+            title="On: tabs you open or close in the active workspace are added to / removed from the saved workspace. Off: the saved workspace keeps the number of tabs it was saved with — navigation is still saved if the option above is on."
+          >
+            <input id="autosave-count-toggle" type="checkbox" />
+            Auto-save tabs you add or close
+          </label>
           <p class="foot-hint">
             Chrome's own bookmarks bar row can be hidden entirely: right-click
             the bookmarks bar and uncheck <b>Show tab groups</b>.

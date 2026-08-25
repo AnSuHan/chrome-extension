@@ -178,4 +178,110 @@ const B = group("b", "Home", ["https://b1.test/", "https://b2.test/"]);
   ok('"Pre-load tabs" off ⇒ old behaviour: pre-warm only, no loading');
 }
 
+/* ------------------------------------------------------------------ *
+ * The two auto-save switches, driven through the real live-sync path
+ * ------------------------------------------------------------------ */
+
+const savedUrls = (env) => env.storage.local["tabinet.g.a"].tabs.map((t) => t.url);
+const SYNC = 700; // live sync coalesces for 500ms
+
+/** Open workspace A as the window's active workspace, hydration finished. */
+async function openA(env, settings) {
+  await bootWorker(env, { groups: [A, B], settings });
+  await send(env, { type: "RESTORE_GROUP", id: "a", switch: true, windowId: 1 });
+  await settle(env);
+  return [...env.tabs.values()].filter((t) => t.windowId === 1);
+}
+
+/* 6 — both on (default): navigation, new tabs and closed tabs are all saved */
+{
+  const env = install({ navMs: 5 });
+  const tabs = await openA(env, {});
+  assert.deepEqual(savedUrls(env), A.tabs.map((t) => t.url), "unchanged so far");
+
+  env.goTo(tabs[1].id, "https://moved.test/");
+  await sleep(SYNC);
+  assert.equal(savedUrls(env)[1], "https://moved.test/", "navigation saved");
+
+  await env.chrome.tabs.create({ url: "https://new.test/", windowId: 1 });
+  await sleep(SYNC);
+  assert.equal(savedUrls(env).length, 5, "the new tab was saved");
+  assert.ok(savedUrls(env).includes("https://new.test/"));
+
+  await env.chrome.tabs.remove([tabs[0].id]);
+  await sleep(SYNC);
+  assert.equal(savedUrls(env).length, 4, "the closed tab was dropped");
+  ok("both on: navigation, added and closed tabs are all saved");
+}
+
+/* 7 — changes on, count off: follows tabs, keeps the saved tab count */
+{
+  const env = install({ navMs: 5 });
+  const tabs = await openA(env, { autoSaveCount: false });
+
+  env.goTo(tabs[1].id, "https://moved.test/");
+  await sleep(SYNC);
+  assert.equal(savedUrls(env)[1], "https://moved.test/", "navigation saved");
+
+  await env.chrome.tabs.create({ url: "https://new.test/", windowId: 1 });
+  await sleep(SYNC);
+  assert.equal(savedUrls(env).length, 4, "tab count held at 4");
+  assert.ok(!savedUrls(env).includes("https://new.test/"), "new tab not saved");
+
+  await env.chrome.tabs.remove([tabs[0].id]);
+  await sleep(SYNC);
+  assert.equal(savedUrls(env).length, 4, "closing a tab doesn't shrink it either");
+  ok("changes on / count off: tabs are followed, the count stays put");
+}
+
+/* 8 — changes off, count on: size follows the window, urls stay as saved */
+{
+  const env = install({ navMs: 5 });
+  const tabs = await openA(env, { autoSaveChanges: false });
+
+  env.goTo(tabs[1].id, "https://moved.test/");
+  await sleep(SYNC);
+  assert.deepEqual(savedUrls(env), A.tabs.map((t) => t.url), "navigation not saved");
+
+  await env.chrome.tabs.create({ url: "https://new.test/", windowId: 1 });
+  await sleep(SYNC);
+  const after = savedUrls(env);
+  assert.equal(after.length, 5, "the count followed the window");
+  assert.equal(after[4], "https://new.test/", "the new slot took the live url");
+  assert.deepEqual(after.slice(0, 4), A.tabs.map((t) => t.url), "saved urls kept");
+  ok("changes off / count on: the count follows, saved urls are kept");
+}
+
+/* 9 — both off: the saved workspace is frozen */
+{
+  const env = install({ navMs: 5 });
+  const tabs = await openA(env, { autoSaveChanges: false, autoSaveCount: false });
+
+  env.goTo(tabs[1].id, "https://moved.test/");
+  await env.chrome.tabs.create({ url: "https://new.test/", windowId: 1 });
+  await sleep(SYNC);
+  await env.chrome.tabs.remove([tabs[0].id]);
+  await sleep(SYNC);
+  assert.deepEqual(savedUrls(env), A.tabs.map((t) => t.url), "nothing was written");
+  ok("both off: the saved workspace is frozen until you save over it");
+}
+
+/* 10 — the switches also gate the save a closing workspace does */
+{
+  const env = install({ navMs: 5 });
+  // keepLoaded off ⇒ switching away saves and closes the workspace.
+  const tabs = await openA(env, { keepLoaded: false, autoSaveCount: false });
+  env.goTo(tabs[1].id, "https://moved.test/");
+  await env.chrome.tabs.create({ url: "https://extra.test/", windowId: 1 });
+  await sleep(SYNC);
+
+  await send(env, { type: "RESTORE_GROUP", id: "b", switch: true, windowId: 1 });
+  await sleep(SYNC);
+  const after = savedUrls(env);
+  assert.equal(after.length, 4, "the closing save kept the saved tab count");
+  assert.ok(after.includes("https://moved.test/"), "but did record the navigation");
+  assert.ok(!after.includes("https://extra.test/"), "and dropped the extra tab");
+  ok("closing a workspace obeys the same two switches");
+}
+
 console.log(`\nservice-worker.js: ${pass} checks passed`);

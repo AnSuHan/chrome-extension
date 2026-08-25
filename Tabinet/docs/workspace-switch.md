@@ -49,7 +49,7 @@
 - `adoptTabIntoActiveGroup`(onCreated): 새로 연 ungrouped 탭(Ctrl+T 등)을 활성
   워크스페이스 그룹에 편입 → 전환 시 함께 접혀 다음 워크스페이스로 새지 않음.
 - `syncWorkspace`: **활성 그룹의 탭만** 저장 그룹에 미러링(접힌 워크스페이스는
-  전환 당시 스냅샷 유지).
+  전환 당시 스냅샷 유지). 무엇을 미러링할지는 자동 저장 옵션 2개가 정한다(아래).
 - `handleEmptiedWorkspace`: 활성 그룹 탭이 모두 닫히면 다른 로드된 워크스페이스를
   펼치거나(무재로딩), 없으면 다음 저장 그룹을 lazy로 열거나, 빈 탭 유지.
 - `reconcileWorkspaces`(storage.onChanged, `tabinet.order` 변경 시): 삭제된
@@ -79,6 +79,37 @@
 - **manifest `host_permissions: ["http://*/*", "https://*/*"]` 필요.** 호스트 권한
   없이는 워커의 교차 출처 인증 fetch 가 차단된다(= 워밍 효과 없음). 기존 설치본은
   업데이트 시 사용자가 권한을 다시 승인해야 한다.
+
+### 자동 저장 옵션 2개 (`storage.js` mergeTabs)
+
+라이브 싱크가 저장본에 **얼마나 반영할지**를 두 개의 독립 스위치로 나눴다.
+
+| 설정 | 의미 | 기본 |
+|---|---|---|
+| `autoSaveChanges` | 탭이 다른 페이지로 이동하면 저장본의 그 자리도 갱신 | on |
+| `autoSaveCount`   | 탭을 열거나 닫으면 저장본의 **탭 개수**도 변경 | on |
+
+`mergeTabs(saved, live, { changes, count })` 가 최종 목록을 만든다.
+
+- `changes + count` → live 그대로(= 기존 동작).
+- `changes` 만 → 길이는 `saved.length` 고정, 각 자리는 `live[i] ?? saved[i]`.
+  → 탭이 이동한 건 저장되지만, 추가/삭제는 저장본 크기를 바꾸지 못한다.
+- `count` 만 → 길이는 `live.length`, 각 자리는 `saved[i] ?? live[i]`.
+  → 개수는 따라가되 기존 자리의 URL 은 저장 당시 값을 유지하고, 저장된 값이 없는
+  새 자리만 실제 탭의 URL 을 쓴다.
+- 둘 다 off → `null` 반환 = **아무것도 쓰지 않는다**(저장본 동결).
+
+주의: 자리 맞춤은 **순서 기준**이다(저장본 자체가 순서 있는 목록이므로).
+`changes` 를 끈 상태에서 중간 탭을 닫으면 뒤 탭들이 한 칸씩 당겨져 저장본의 그
+자리에는 이전 URL 이 남는다 — 정확히 따라가게 하려면 `changes` 를 켜야 한다.
+
+적용 지점은 두 곳이며 동일한 정책을 쓴다.
+- `syncWorkspace` — 브라우징 중 실시간 미러링(500ms 코얼레싱).
+- `unloadWorkspace` — keep-live 를 끈 워크스페이스를 전환하며 **닫기 직전** 저장.
+  닫는다고 해서 사용자가 저장하지 말라고 한 변경까지 쓰지는 않는다.
+
+같은 내용을 다시 쓰는 것을 막기 위해 `sameTabs` 로 URL 목록이 동일하면 저장을
+건너뛴다(하이드레이션이 만드는 다량의 `complete` 이벤트에서 특히 중요).
 
 ### 열자마자 전부 실제 로딩 — 하이드레이션 (`src/background/hydrate.js`)
 
@@ -213,6 +244,12 @@
       않는가?** (서버 액세스 로그/`chrome://net-export`)
 - [ ] 편집기 토글 "Pre-load tabs when a workspace opens" 를 끄면 예전처럼 클릭할
       때 로딩되는가?
+- [ ] "Auto-save where tabs navigate" 만 켠 상태: 탭에서 다른 사이트로 이동하면
+      저장본에 반영되고, 탭을 새로 열거나 닫아도 **저장본 탭 개수는 그대로**인가?
+- [ ] "Auto-save tabs you add or close" 만 켠 상태: 탭을 추가/삭제하면 개수가
+      따라오고, 기존 탭에서 이동한 URL 은 저장본에 반영되지 **않는가**?
+- [ ] 둘 다 끈 상태: 무엇을 해도 저장본이 그대로인가? keep-live 를 끄고 전환해
+      워크스페이스가 닫힐 때도 저장본이 변하지 않는가?
 - [ ] 전역 "Keep workspaces live in the background" **끄기** → 전환 시 이전
       워크스페이스 탭이 저장 후 닫히고, **탭 스트립·북마크바에 그룹 칩이 전혀
       생기지 않는가?** (기존에 쌓인 칩은 크롬에서 수동 삭제 후 확인)

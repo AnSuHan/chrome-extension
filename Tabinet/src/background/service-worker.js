@@ -36,8 +36,10 @@ import {
   getGroups,
   getSettings,
   importGroups,
+  mergeTabs,
   removeGroup,
   renameGroup,
+  resolveAutoSave,
   resolveKeepLoaded,
   updateGroup,
 } from "../lib/storage.js";
@@ -57,6 +59,14 @@ const isSavable = (t) => t.url && /^https?:/.test(t.url);
 async function saveCurrentWindow({ name, color } = {}) {
   const tabs = await chrome.tabs.query({ currentWindow: true });
   return addGroup({ name, color, tabs: tabs.filter(isSavable) });
+}
+
+/** Do two tab lists hold the same urls in the same order? (skips no-op writes) */
+function sameTabs(a = [], b = []) {
+  return (
+    a.length === b.length &&
+    a.every((t, i) => (t.url ?? "") === (b[i].url ?? ""))
+  );
 }
 
 /** A stable key for a group's tabs (order-independent set of urls). */
@@ -476,21 +486,29 @@ async function closeWorkspaceTabs(windowId, savedId) {
 /**
  * Take the outgoing workspace out of the window entirely (the "doesn't stay
  * live" path): save what its tabs currently show — live sync is paused during a
- * switch, so this is the last chance to record them — then dissolve its group
- * and close them. Nothing of it remains in the tab strip or the bookmarks bar;
+ * switch, so this is the last chance to record them, and the auto-save switches
+ * decide how much of it is written — then dissolve its group and close them. Nothing of it remains in the tab strip or the bookmarks bar;
  * it reopens lazily the next time you switch to it.
  *
  * `gid` is its native group (null if it was running ungrouped) and `strayIds`
  * the window's ungrouped tabs captured before the switch began.
  */
-async function unloadWorkspace(windowId, savedId, gid, strayIds = []) {
+async function unloadWorkspace(windowId, group, gid, strayIds = []) {
+  const savedId = group.id;
   const grouped =
     gid != null
       ? await chrome.tabs.query({ windowId, groupId: gid }).catch(() => [])
       : [];
   const strays = await tabsByIds(strayIds);
-  const snap = snapshotTabs([...grouped, ...strays]);
-  if (snap.length) await updateGroup(savedId, { tabs: snap });
+  const live = snapshotTabs([...grouped, ...strays]);
+  // Same auto-save policy as live sync — closing a workspace is not a licence
+  // to write back changes the user asked us not to save.
+  const snap = live.length
+    ? mergeTabs(group.tabs ?? [], live, resolveAutoSave(await getSettings()))
+    : null;
+  if (snap?.length && !sameTabs(group.tabs, snap)) {
+    await updateGroup(savedId, { tabs: snap });
+  }
 
   await setLoadedGroupId(windowId, savedId, null);
   await setWsOrder(
@@ -634,7 +652,7 @@ async function switchToGroup(id, windowId) {
           await touchWorkspaceOrder(windowId, prevId);
         }
       } else {
-        await unloadWorkspace(windowId, prevId, prevGid, strayIds);
+        await unloadWorkspace(windowId, prevGroup, prevGid, strayIds);
       }
     } else {
       await persistUnsavedTabs(snapshotTabs(strayTabs), groups);
@@ -661,6 +679,11 @@ async function switchToGroup(id, windowId) {
  * snapshot always reflects the real, up-to-date pages (including where a login
  * flow finally lands). Only the ACTIVE group's tabs are synced; collapsed
  * (background) workspaces keep the snapshot they were frozen with.
+ *
+ * How much is mirrored is up to two independent settings (storage.js
+ * mergeTabs): whether a tab that NAVIGATES updates its saved slot, and whether
+ * tabs you OPEN or CLOSE change the saved workspace's size. With both off the
+ * saved copy is frozen until you save over it yourself.
  * ------------------------------------------------------------------ */
 
 const syncTimers = new Map(); // windowId -> timeout id
@@ -695,10 +718,14 @@ async function syncWorkspace(windowId) {
   // has been grouped — the window's ungrouped tabs.
   const gid = await loadedGroupId(windowId, activeId);
   const query = gid != null ? { windowId, groupId: gid } : { windowId, groupId: NONE };
-  const tabs = snapshotTabs(await chrome.tabs.query(query));
+  const live = snapshotTabs(await chrome.tabs.query(query));
   // Never overwrite a saved group with an empty set — an emptied workspace is
   // handled as a switch (see handleEmptiedWorkspace), not a wipe.
-  if (!tabs.length) return;
+  if (!live.length) return;
+
+  const saved = groups.find((g) => g.id === activeId);
+  const tabs = mergeTabs(saved?.tabs ?? [], live, resolveAutoSave(await getSettings()));
+  if (!tabs?.length || sameTabs(saved?.tabs, tabs)) return; // nothing to write
   await updateGroup(activeId, { tabs });
 }
 

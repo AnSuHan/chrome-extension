@@ -34,7 +34,22 @@ const SETTINGS_KEY = "tabinet.settings";
 // never hits a cold page. Off, tabs stay on the placeholder until clicked and
 // are only network-warmed — lighter on memory, but the first click pays for
 // rendering the page. See src/background/hydrate.js.
-const DEFAULT_SETTINGS = { area: "local", keepLoaded: true, preloadTabs: true };
+// autoSaveChanges / autoSaveCount — how much of what you do in a workspace is
+// written back to the saved copy as you browse (see mergeTabs):
+//   autoSaveChanges — a tab that navigates updates the saved tab in its place,
+//     so the workspace reopens where you left off.
+//   autoSaveCount — tabs you open or close are added to / removed from the
+//     saved workspace, so it grows and shrinks with the window.
+// They are independent: keep changes on and count off to let a workspace stay
+// exactly the size you saved it while still following where its tabs go; turn
+// both off to freeze the saved copy until you save over it deliberately.
+const DEFAULT_SETTINGS = {
+  area: "local",
+  keepLoaded: true,
+  preloadTabs: true,
+  autoSaveChanges: true,
+  autoSaveCount: true,
+};
 
 const groupKey = (id) => GROUP_PREFIX + id;
 
@@ -67,6 +82,46 @@ export async function updateSettings(patch) {
 export function resolveKeepLoaded(group, settings) {
   if (typeof group?.keepLoaded === "boolean") return group.keepLoaded;
   return settings?.keepLoaded ?? DEFAULT_SETTINGS.keepLoaded;
+}
+
+/** What live sync may write back — see mergeTabs. */
+export function resolveAutoSave(settings) {
+  return {
+    changes: settings?.autoSaveChanges !== false,
+    count: settings?.autoSaveCount !== false,
+  };
+}
+
+/**
+ * The tab list to store for a workspace, from what is saved (`saved`) and what
+ * the window shows right now (`live`), under the two auto-save switches.
+ *
+ *   changes + count  → the live list, as is (the default: the saved copy simply
+ *                      follows the window).
+ *   changes only     → the saved tab COUNT is kept; each slot follows the live
+ *                      tab in that position, so navigating a tab is saved but
+ *                      opening or closing one is not.
+ *   count only       → the COUNT follows the window, but each slot keeps the
+ *                      url it was saved with; positions with no saved url (a
+ *                      newly opened tab) take the live one.
+ *   neither          → null: nothing may be written.
+ *
+ * Both lists are ordered, and slots line up by position — the same thing a
+ * saved workspace is. With `changes` off that is a rough match: closing a tab
+ * in the middle shifts the ones after it, so the saved list keeps the earlier
+ * urls in those slots. Turning `changes` on is what makes the saved copy track
+ * tabs exactly.
+ */
+export function mergeTabs(saved = [], live = [], { changes, count } = {}) {
+  if (!changes && !count) return null;
+  if (changes && count) return live;
+  const length = count ? live.length : saved.length;
+  const out = [];
+  for (let i = 0; i < length; i += 1) {
+    const pick = changes ? (live[i] ?? saved[i]) : (saved[i] ?? live[i]);
+    if (pick) out.push({ title: pick.title ?? "", url: pick.url ?? "" });
+  }
+  return out;
 }
 
 function storeFor(areaName) {

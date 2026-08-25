@@ -215,7 +215,17 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
     };
   };
 
-  return { chrome, tabs, ports, log, storage, tick, navigate };
+  /** The user (or a page) navigating a tab somewhere new. */
+  function goTo(tabId, url) {
+    const t = tabs.get(tabId);
+    if (!t) return;
+    ports.get(tabId)?.close();
+    t.url = url;
+    t.status = "complete";
+    onUpdated.fire(tabId, { status: "complete", url }, clone(t));
+  }
+
+  return { chrome, tabs, ports, log, storage, tick, navigate, goTo };
 }
 
 export function lazyUrl(url, title = "") {

@@ -14,7 +14,8 @@ pages connect their port, navigations complete, events fire.
 |---|---|
 | `hydrate.test.mjs` | `src/background/hydrate.js` — background loading: order, pacing (≤3 at once), the port → message → `tabs.update` fallback chain, cancellation, closed tabs, the 60-tab cap. |
 | `lazy.test.mjs` | `src/lazy/lazy.js` — how a placeholder leaves the placeholder: the port signal, `replace()` (no Back entry), the message fallback, and the click/visible path. |
-| `worker.test.mjs` | `src/background/service-worker.js` end to end, driven by a `RESTORE_GROUP` message: every tab opens **and loads** in one window, nothing is requested for a workspace that isn't open, switching away cancels the old workspace's loading, and the "Pre-load tabs" setting turns it all off. |
+| `snapshot.test.mjs` | `src/lib/storage.js` — the two auto-save switches: what `mergeTabs` writes for each of the four combinations. |
+| `worker.test.mjs` | `src/background/service-worker.js` end to end, driven by a `RESTORE_GROUP` message: every tab opens **and loads** in one window, nothing is requested for a workspace that isn't open, switching away cancels the old workspace's loading, and the "Pre-load tabs" setting turns it all off. Also drives live sync (navigate a tab, open one, close one) through each auto-save combination, including the save a closing workspace does. |
 
 `test/.tmp/` is a staged copy of `src/` (see the header of `run.mjs`); it is
 rebuilt on every run and git-ignored.

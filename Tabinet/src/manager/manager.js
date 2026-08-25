@@ -524,6 +524,8 @@ document.getElementById("new-group-btn").addEventListener("click", async () => {
 const syncToggle = document.getElementById("sync-toggle");
 const keepLoadedToggle = document.getElementById("keep-loaded-toggle");
 const preloadToggle = document.getElementById("preload-toggle");
+const autoSaveChangesToggle = document.getElementById("autosave-changes-toggle");
+const autoSaveCountToggle = document.getElementById("autosave-count-toggle");
 
 async function refreshSettingsToggles() {
   const settings = await getSettings();
@@ -531,6 +533,8 @@ async function refreshSettingsToggles() {
   globalKeepLoaded = settings.keepLoaded !== false;
   keepLoadedToggle.checked = globalKeepLoaded;
   preloadToggle.checked = settings.preloadTabs !== false;
+  autoSaveChangesToggle.checked = settings.autoSaveChanges !== false;
+  autoSaveCountToggle.checked = settings.autoSaveCount !== false;
   renderDetail(); // the per-group "Default (…)" label depends on it
 }
 
@@ -540,6 +544,24 @@ preloadToggle.addEventListener("change", async () => {
     preloadToggle.checked
       ? "Tabs load in the background when a workspace opens — clicking one is instant."
       : "Tabs load only when you click them — lighter on memory, slower on first click.",
+  );
+});
+
+autoSaveChangesToggle.addEventListener("change", async () => {
+  await updateSettings({ autoSaveChanges: autoSaveChangesToggle.checked });
+  toast(
+    autoSaveChangesToggle.checked
+      ? "Saved workspaces follow their tabs as you browse."
+      : "Saved tabs keep the URL they were saved with.",
+  );
+});
+
+autoSaveCountToggle.addEventListener("change", async () => {
+  await updateSettings({ autoSaveCount: autoSaveCountToggle.checked });
+  toast(
+    autoSaveCountToggle.checked
+      ? "Tabs you open or close are saved to the workspace."
+      : "The saved workspace keeps its tab count; opening or closing tabs won't change it.",
   );
 });
 
