@@ -523,14 +523,25 @@ document.getElementById("new-group-btn").addEventListener("click", async () => {
 
 const syncToggle = document.getElementById("sync-toggle");
 const keepLoadedToggle = document.getElementById("keep-loaded-toggle");
+const preloadToggle = document.getElementById("preload-toggle");
 
 async function refreshSettingsToggles() {
   const settings = await getSettings();
   syncToggle.checked = settings.area === "sync";
   globalKeepLoaded = settings.keepLoaded !== false;
   keepLoadedToggle.checked = globalKeepLoaded;
+  preloadToggle.checked = settings.preloadTabs !== false;
   renderDetail(); // the per-group "Default (…)" label depends on it
 }
+
+preloadToggle.addEventListener("change", async () => {
+  await updateSettings({ preloadTabs: preloadToggle.checked });
+  toast(
+    preloadToggle.checked
+      ? "Tabs load in the background when a workspace opens — clicking one is instant."
+      : "Tabs load only when you click them — lighter on memory, slower on first click.",
+  );
+});
 
 keepLoadedToggle.addEventListener("change", async () => {
   globalKeepLoaded = keepLoadedToggle.checked;

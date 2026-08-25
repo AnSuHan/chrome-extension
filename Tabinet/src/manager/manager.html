@@ -39,6 +39,13 @@
             <input id="keep-loaded-toggle" type="checkbox" />
             Keep workspaces live in the background
           </label>
+          <label
+            class="sync-toggle"
+            title="On: when a workspace opens, Tabinet loads its tabs in the background a few at a time, so clicking a tab shows an already-loaded page instead of waiting for it. Off: tabs stay unloaded until you click them (lighter on memory), and are only network-warmed."
+          >
+            <input id="preload-toggle" type="checkbox" />
+            Pre-load tabs when a workspace opens
+          </label>
           <p class="foot-hint">
             Chrome's own bookmarks bar row can be hidden entirely: right-click
             the bookmarks bar and uncheck <b>Show tab groups</b>.

@@ -16,8 +16,11 @@
  *   memory can't grow without limit; evicted ones reopen lazily on return.
  *
  *   Whenever a workspace comes into view, its still-unloaded (placeholder) tabs
- *   are pre-warmed from here — see src/background/prewarm.js — so clicking one
- *   opens an already-signed-in page almost immediately.
+ *   are loaded from here, ahead of the user and a few at a time — see
+ *   src/background/hydrate.js — so every tab is already on its real, rendered
+ *   page by the time it is clicked; there is no cold load at click time. Tabs
+ *   past the hydration cap fall back to a network pre-warm (prewarm.js), which
+ *   at least gets their session, DNS/TLS and document cache ready.
  *
  *   Staying live costs visibility: Chrome lists every live tab group in the
  *   bookmarks bar. So "stay live" is a setting — global, with a per-workspace
@@ -26,6 +29,7 @@
  *   it, and are saved and closed when you switch away, leaving nothing behind.
  */
 
+import { HYDRATE_LIMIT, cancelHydrate, hydrateTabs } from "./hydrate.js";
 import { cancelWarm, warmUrls } from "./prewarm.js";
 import {
   addGroup,
@@ -250,6 +254,7 @@ async function touchWorkspaceOrder(windowId, savedId) {
 
 // Forget all bookkeeping for a closed window.
 async function cleanupWindow(windowId) {
+  cancelHydrate(`win:${windowId}`);
   cancelWarm(`win:${windowId}`);
   const mapAll = await getAllWs(WS_MAP_KEY);
   if (windowId in mapAll) {
@@ -328,24 +333,36 @@ async function openWorkspaceGroup(group, windowId, { grouped = true } = {}) {
 }
 
 /**
- * A workspace just came into view: request its not-yet-loaded pages in the
- * background so the session/cookies, DNS/TLS and document cache are warm before
- * the user clicks a tab — the click then lands on a signed-in page almost
- * immediately instead of running the whole login redirect chain.
+ * A workspace just came into view: get its not-yet-loaded tabs ready in the
+ * background, so a click never pays for a cold page.
  *
- * Its tabs are identified by native group (`gid`) or, for a workspace running
- * ungrouped, by the ids we just opened (`tabIds`); with neither we fall back to
- * the saved urls. Only tabs still on the lazy placeholder are warmed — anything
- * already showing a real page needs nothing, and `skipTabId` drops the tab we
- * just activated, which is loading itself.
+ * Two phases, strongest first:
+ *
+ *  1. HYDRATE — actually load the placeholder tabs, a few at a time (see
+ *     src/background/hydrate.js). Each tab ends up on its real, fully rendered
+ *     page while the user is still reading the first one, so clicking it is
+ *     just a switch of what's on screen. This is what removes cold loading.
+ *  2. PRE-WARM — for anything past the hydration cap (a very large workspace),
+ *     fall back to requesting the page from the worker (see prewarm.js): the
+ *     tab stays on its placeholder, but cookies/DNS/TLS and the document are
+ *     warm, so the eventual click is still far cheaper than a cold start.
+ *
+ * Hydration is what the "Pre-load tabs" setting turns off; with it off the
+ * behaviour is exactly the old one — open placeholder tabs are pre-warmed only.
+ *
+ * NOTHING IS TOUCHED THAT ISN'T AN OPEN TAB IN THIS WINDOW. We only ever act on
+ * tabs of the workspace that is on screen — found by its native group (`gid`)
+ * or, for a workspace running ungrouped, by the ids we just opened (`tabIds`).
+ * A workspace with no tabs open (not loaded, or evicted) is left completely
+ * alone: no requests go out for saved urls that have no tab behind them. Of the
+ * open tabs, only those still on the lazy placeholder need anything — one
+ * already showing a real page is done, and `skipTabId` drops the tab we just
+ * activated, which is loading itself.
  *
  * Fire-and-forget: a switch must never wait on the network. Keyed per window,
- * so switching again cancels the previous window's warm run.
+ * so switching again cancels this window's previous hydrate/warm runs.
  */
-function prewarmWorkspace(
-  windowId,
-  { gid = null, tabIds = null, group = null, skipTabId = null } = {},
-) {
+function warmWorkspace(windowId, { gid = null, tabIds = null, skipTabId = null } = {}) {
   (async () => {
     let tabs = [];
     if (gid != null) {
@@ -353,14 +370,38 @@ function prewarmWorkspace(
     } else if (tabIds?.length) {
       tabs = await tabsByIds(tabIds);
     }
-    const urls = tabs.length
-      ? tabs
-          .filter((t) => t.id !== skipTabId)
-          .filter((t) => (t.url || t.pendingUrl || "").startsWith(LAZY_PAGE))
-          .map((t) => effectiveTab(t).url)
-      : (group?.tabs ?? []).map((t) => t.url ?? "");
-    if (urls.length) await warmUrls(urls, { key: `win:${windowId}` });
-  })().catch((e) => console.warn("Tabinet prewarmWorkspace:", e));
+    // No open tabs (the group vanished, or the workspace isn't loaded) — then
+    // there is nothing to prepare. We never reach out for a saved url that has
+    // no tab behind it.
+    if (!tabs.length) return;
+    const key = `win:${windowId}`;
+
+    const pending = tabs
+      .filter((t) => t.windowId === windowId) // never stray outside this window
+      .filter((t) => t.id !== skipTabId)
+      .filter((t) => (t.url || t.pendingUrl || "").startsWith(LAZY_PAGE))
+      .map((t) => ({ tabId: t.id, url: effectiveTab(t).url }))
+      .filter((e) => /^https?:/i.test(e.url));
+    if (!pending.length) return;
+
+    if ((await getSettings()).preloadTabs === false) {
+      await warmUrls(
+        pending.map((e) => e.url),
+        { key },
+      );
+      return;
+    }
+
+    // Everything the hydrator won't get to still gets the cheap network warm.
+    const overflow = pending.slice(HYDRATE_LIMIT);
+    if (overflow.length) {
+      warmUrls(
+        overflow.map((e) => e.url),
+        { key },
+      );
+    }
+    await hydrateTabs(pending, { key });
+  })().catch((e) => console.warn("Tabinet warmWorkspace:", e));
 }
 
 /**
@@ -472,16 +513,34 @@ async function evictWorkspaces(windowId) {
   for (const savedId of evicted) await closeWorkspaceTabs(windowId, savedId);
 }
 
-/** Open every tab of a saved group (ungrouped, additive) in the current window. */
-async function restoreGroup(id) {
+/**
+ * Open every tab of a saved group (ungrouped, additive) in one window — the
+ * given one, else the current one. Everything stays inside that single window;
+ * Tabinet never opens another browser window.
+ *
+ * The tabs land on the placeholder so they all appear at once, then get loaded
+ * in the background right away — same as a workspace switch, so clicking one
+ * afterwards doesn't wait for a cold page.
+ */
+async function restoreGroup(id, windowId = null) {
   const groups = await getGroups();
   const group = groups.find((g) => g.id === id);
   if (!group || group.tabs.length === 0) return;
-  await Promise.all(
+  if (windowId == null) {
+    const w = await chrome.windows.getCurrent().catch(() => null);
+    windowId = w?.id ?? null;
+  }
+  if (windowId == null) return; // no window to open into
+  const created = await Promise.all(
     group.tabs.map((tab) =>
-      chrome.tabs.create({ url: lazyUrl(tab), active: false }).catch(() => {}),
+      chrome.tabs
+        .create({ url: lazyUrl(tab), active: false, windowId })
+        .catch(() => null),
     ),
   );
+  const opened = created.filter(Boolean);
+  if (!opened.length) return;
+  warmWorkspace(windowId, { tabIds: opened.map((t) => t.id) });
 }
 
 /**
@@ -515,7 +574,7 @@ async function switchToGroup(id, windowId) {
     const w = await chrome.windows.getCurrent().catch(() => null);
     windowId = w?.id;
   }
-  if (windowId == null) return restoreGroup(id); // can't scope safely
+  if (windowId == null) return restoreGroup(id); // no window: plain additive open
 
   const prevId = await getActiveGroup(windowId);
   if (prevId === id) {
@@ -524,7 +583,7 @@ async function switchToGroup(id, windowId) {
     if (gid != null) {
       await chrome.tabGroups.update(gid, { collapsed: false }).catch(() => {});
     }
-    prewarmWorkspace(windowId, { gid, group }); // top up any still-cold tabs
+    warmWorkspace(windowId, { gid }); // top up any still-cold tabs
     return;
   }
 
@@ -561,12 +620,7 @@ async function switchToGroup(id, windowId) {
       await chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
     }
     // Warm the rest in the background while the user looks at the first tab.
-    prewarmWorkspace(windowId, {
-      gid,
-      tabIds: openedIds,
-      group,
-      skipTabId: firstTabId,
-    });
+    warmWorkspace(windowId, { gid, tabIds: openedIds, skipTabId: firstTabId });
 
     // 2) Get the outgoing workspace out of sight. A tracked workspace either
     //    stays live (grouped + collapsed, so switching back is instant) or is
@@ -678,7 +732,7 @@ async function handleEmptiedWorkspace(windowId, activeId) {
       if (tabs[0]?.id != null) {
         await chrome.tabs.update(tabs[0].id, { active: true }).catch(() => {});
       }
-      prewarmWorkspace(windowId, { gid, skipTabId: tabs[0]?.id ?? null });
+      warmWorkspace(windowId, { gid, skipTabId: tabs[0]?.id ?? null });
       await touchWorkspaceOrder(windowId, nextId);
       await setActiveGroup(windowId, nextId);
       return;
@@ -694,12 +748,7 @@ async function handleEmptiedWorkspace(windowId, activeId) {
       if (tabIds[0] != null) {
         await chrome.tabs.update(tabIds[0], { active: true }).catch(() => {});
       }
-      prewarmWorkspace(windowId, {
-        gid,
-        tabIds,
-        group: next,
-        skipTabId: tabIds[0] ?? null,
-      });
+      warmWorkspace(windowId, { gid, tabIds, skipTabId: tabIds[0] ?? null });
       await touchWorkspaceOrder(windowId, next.id);
       await setActiveGroup(windowId, next.id);
     } else {
@@ -832,7 +881,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // "Open all" switches workspace (collapse current + show target); other
         // callers (editor) keep the additive restore.
         if (msg.switch) await switchToGroup(msg.id, msg.windowId);
-        else await restoreGroup(msg.id);
+        else await restoreGroup(msg.id, msg.windowId ?? null);
         sendResponse({ ok: true });
         break;
       case "REMOVE_GROUP":

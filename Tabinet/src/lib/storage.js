@@ -29,7 +29,12 @@ const SETTINGS_KEY = "tabinet.settings";
 // tab group in the bookmarks bar. Off, Tabinet creates no tab groups at all
 // (nothing in the bookmarks bar) and workspaces reopen lazily on return.
 // Individual groups may override it (see resolveKeepLoaded).
-const DEFAULT_SETTINGS = { area: "local", keepLoaded: true };
+// preloadTabs — when a workspace opens, should its tabs be loaded in the
+// background (a few at a time) instead of waiting for a click? On, a click
+// never hits a cold page. Off, tabs stay on the placeholder until clicked and
+// are only network-warmed — lighter on memory, but the first click pays for
+// rendering the page. See src/background/hydrate.js.
+const DEFAULT_SETTINGS = { area: "local", keepLoaded: true, preloadTabs: true };
 
 const groupKey = (id) => GROUP_PREFIX + id;
 

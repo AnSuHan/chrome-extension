@@ -65,6 +65,15 @@ Options):
   **Default / Keep live / Close on switch** selector to override it per
   workspace.
 
+- **Pre-load tabs when a workspace opens** (on by default) — opening a
+  workspace loads all of its tabs in the background, a few at a time, inside
+  that one window. By the time you click a tab it is already on its real,
+  rendered page, so there is no cold load at the moment you click. Turn it off
+  and tabs stay unloaded until you click them (lighter on memory) — they are
+  still network-warmed, so the click is quicker than a cold start. Only tabs
+  that are actually open are touched; nothing is requested for a workspace that
+  isn't open.
+
   The bookmarks-bar row is Chrome's own feature, so no extension can hide it:
   to remove it entirely, right-click the bookmarks bar and uncheck **Show tab
   groups**. Chips left over from earlier sessions stay until you right-click
@@ -127,7 +136,7 @@ Requires Chrome 114+ (Side Panel API).
 | `storage`   | Persist saved groups (local and, if enabled, sync). |
 | `downloads` | Write the JSON file when you Save your groups. |
 | `sidePanel` | Show the docked sidebar and open it from the toolbar icon. |
-| host access (`http`/`https`) | Pre-warm a workspace's pages when you switch to it, so clicking a tab opens an already-signed-in page almost instantly. Tabinet only requests pages you saved yourself; nothing is sent anywhere. |
+| host access (`http`/`https`) | Pre-warm a workspace's pages when you switch to it (the network side of the pre-load above), so clicking a tab opens an already-signed-in page almost instantly. Tabinet only requests pages of tabs you have open; nothing is sent anywhere. |
 
 ## Roadmap
 
