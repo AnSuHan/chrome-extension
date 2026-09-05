@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tabinet — store shot</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 1280px; height: 800px; overflow: hidden; }
+  body {
+    background: linear-gradient(140deg, #eef2f9 0%, #e6ecf7 45%, #edeaf7 100%);
+    font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #202124;
+  }
+  .win {
+    position: absolute; left: 30px; top: 26px; width: 1220px; height: 748px;
+    background: #dee1e6; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(20, 30, 60, .22), 0 3px 10px rgba(20, 30, 60, .12);
+  }
+  /* ---- tab strip ---- */
+  .strip { height: 42px; display: flex; align-items: flex-end; padding: 0 8px; gap: 2px; }
+  .tab {
+    display: flex; align-items: center; gap: 8px;
+    height: 34px; padding: 0 12px; min-width: 150px; max-width: 210px;
+    border-radius: 9px 9px 0 0; color: #3c4043; font-size: 12.5px;
+  }
+  .tab img { width: 16px; height: 16px; border-radius: 3px; }
+  .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab.on { background: #fff; color: #202124; font-weight: 600; }
+  .plus { color: #5f6368; font-size: 18px; padding: 0 10px 6px; }
+  /* ---- toolbar ---- */
+  .bar { height: 46px; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+  .nav { display: flex; gap: 6px; color: #5f6368; font-size: 15px; }
+  .nav i { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; font-style: normal; }
+  .omni {
+    flex: 1; height: 30px; border-radius: 15px; background: #f1f3f4;
+    display: flex; align-items: center; padding: 0 14px; gap: 8px;
+    color: #5f6368; font-size: 12.5px;
+  }
+  .omni b { color: #202124; font-weight: 400; }
+  .toolicon {
+    width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    background: #e8f0fe; outline: 2px solid #c7dbff;
+  }
+  .toolicon img { width: 19px; height: 19px; }
+  /* ---- content ---- */
+  .body { height: calc(748px - 42px - 46px); display: flex; background: #fff; }
+  .page { flex: 1; padding: 46px 60px; overflow: hidden; }
+  .page h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .page .sub { color: #80868b; font-size: 13px; margin: 0 0 30px; }
+  .ln { height: 11px; border-radius: 6px; background: #eceff3; margin: 11px 0; }
+  .ln.s { width: 62%; } .ln.m { width: 84%; } .ln.l { width: 96%; }
+  .card { margin-top: 30px; height: 168px; border-radius: 12px;
+          background: linear-gradient(120deg, #eaf1fe, #f3ecfd); border: 1px solid #e6e9f2; }
+  .h2 { height: 13px; width: 34%; border-radius: 6px; background: #dfe3ea; margin: 34px 0 16px; }
+  iframe { width: 400px; height: 100%; border: 0; border-left: 1px solid #dadce0; background: #fff; }
+
+  /* dark variant of the window mock (used with --force-dark-mode) */
+  body.dark { background: linear-gradient(140deg, #1a1d24 0%, #171a21 45%, #1d1a26 100%); color: #e8eaed; }
+  body.dark .win { background: #202124; box-shadow: 0 24px 60px rgba(0,0,0,.5), 0 3px 10px rgba(0,0,0,.4); }
+  body.dark .tab { color: #bdc1c6; }
+  body.dark .tab.on { background: #35363a; color: #e8eaed; }
+  body.dark .plus { color: #9aa0a6; }
+  body.dark .bar { background: #35363a; }
+  body.dark .nav { color: #9aa0a6; }
+  body.dark .omni { background: #202124; color: #9aa0a6; }
+  body.dark .omni b { color: #e8eaed; }
+  body.dark .toolicon { background: #2b3b57; outline-color: #3c5a8a; }
+  body.dark .body { background: #1f1f20; }
+  body.dark .page h1 { color: #e8eaed; }
+  body.dark .page .sub { color: #9aa0a6; }
+  body.dark .ln, body.dark .h2 { background: #2e2f31; }
+  body.dark .card { background: linear-gradient(120deg, #22293a, #2a2436); border-color: #303236; }
+  body.dark iframe { border-left-color: #3c4043; background: #1f1f20; }
+</style>
+</head>
+<body>
+  <div class="win">
+    <div class="strip" id="strip"></div>
+    <div class="bar">
+      <div class="nav"><i>&#8592;</i><i>&#8594;</i><i>&#8635;</i></div>
+      <div class="omni">&#128274; <b>tabinet.app</b>/docs/sidebar-spec</div>
+      <div class="toolicon"><img src="icons/icon48.png" alt="" /></div>
+    </div>
+    <div class="body">
+      <div class="page">
+        <h1>Sidebar spec</h1>
+        <p class="sub">Tabinet documentation</p>
+        <div class="ln l"></div><div class="ln m"></div><div class="ln l"></div><div class="ln s"></div>
+        <div class="h2"></div>
+        <div class="ln m"></div><div class="ln l"></div><div class="ln s"></div>
+        <div class="card"></div>
+      </div>
+      <iframe id="panel"></iframe>
+    </div>
+  </div>
+<script>
+  const TABS = [
+    ["Sidebar spec — Tabinet docs", "fav/tabinet.png", true],
+    ["Pull requests · tabinet", "fav/github.com.png", false],
+    ["Design system / Components", "fav/figma.com.png", false],
+    ["Sprint board", "fav/notion.so.png", false],
+    ["Why is my service worker t…", "fav/stackoverflow.com.png", false],
+  ];
+  document.getElementById("strip").innerHTML =
+    TABS.map(([t, f, on]) =>
+      `<div class="tab${on ? " on" : ""}"><img src="${f}"><span>${t}</span></div>`
+    ).join("") + '<div class="plus">+</div>';
+
+  const qs = location.search.slice(1);
+  if (new URLSearchParams(location.search).get("dark")) document.body.classList.add("dark");
+  document.getElementById("panel").src =
+    "src/sidepanel/sidepanel.html" + (qs ? "#" + qs : "");
+</script>
+</body>
+</html>

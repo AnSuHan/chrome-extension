@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tabinet — Privacy Policy</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #616a75; --line: #e3e6ea;
+    --card: #f7f8fa; --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --fg: #e6e8eb; --muted: #9aa1ac; --line: #2a2e35;
+      --card: #1d2026; --accent: #6ea8fe;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 56px 22px 80px; }
+  h1 { font-size: 30px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 34px; font-size: 14px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; letter-spacing: -.01em; }
+  h3 { font-size: 16px; margin: 26px 0 8px; }
+  p, li { color: var(--fg); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; }
+  a { color: var(--accent); }
+  .lede {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 20px; margin: 0 0 30px;
+  }
+  .lede p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+  footer { margin-top: 54px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .ko { margin-top: 60px; padding-top: 30px; border-top: 3px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tabinet — Privacy Policy</h1>
+  <p class="sub">Last updated: 5 September 2026</p>
+
+  <div class="lede">
+    <p><strong>Tabinet does not collect, transmit, or sell any user data.</strong> There is no
+    account, no analytics, no tracking, and no server operated by the developer. Everything the
+    extension saves stays in your own browser.</p>
+  </div>
+
+  <h2>1. What Tabinet stores</h2>
+  <p>Tabinet saves groups of tabs so you can restore them later. To do that it stores, on your
+  device:</p>
+  <ul>
+    <li>each saved group's <strong>name and color</strong>;</li>
+    <li>for every tab in a group, its <strong>title and URL</strong>;</li>
+    <li>your <strong>settings</strong> (sync on/off, keep-live, pre-load, the two auto-save
+      switches) and which saved group is currently open in a window.</li>
+  </ul>
+  <p>This is written with the Chrome extension storage API — <code>chrome.storage.local</code>,
+  which never leaves your computer.</p>
+
+  <h3>If you turn on “Sync across devices”</h3>
+  <p>Tabinet moves that same data to <code>chrome.storage.sync</code>, which Chrome syncs through
+  <em>your own Google account</em> so your groups appear on the other Chrome profiles you are
+  signed into. That transfer is handled by Chrome, is governed by Google's privacy policy, and the
+  developer of Tabinet has no access to it. The option is off by default and you can turn it off
+  again at any time.</p>
+
+  <h2>2. What Tabinet sends over the network</h2>
+  <p>Tabinet makes exactly one kind of network request, and never to the developer:</p>
+  <p><strong>Pre-warming.</strong> When you open a saved workspace, its tabs are created on a local
+  placeholder page instead of loading all at once. The extension's background worker then requests
+  the URLs <em>of those tabs</em> — the pages you saved yourself — with your existing cookies, so
+  that DNS/TLS is resolved, any login redirect is followed, and the page is in Chrome's cache
+  before you click it. The result is that clicking a tab opens an already-signed-in page instead of
+  a cold load.</p>
+  <ul>
+    <li>The response is <strong>never rendered, parsed, or inspected</strong>. An HTML body is read
+      only so the response lands in Chrome's HTTP cache; anything else is aborted after the
+      headers.</li>
+    <li><strong>No page content is stored or sent anywhere.</strong></li>
+    <li>Requests go only to sites <strong>you</strong> saved into a workspace. No third party and no
+      developer server is involved — there is none.</li>
+    <li>The work is capped (a few pages at a time, with a per-page timeout and a per-URL cooldown)
+      and is cancelled as soon as you switch away.</li>
+  </ul>
+  <p>Tabinet contains no analytics, no telemetry, no advertising SDK, and no remote code: all of its
+  JavaScript ships inside the extension package.</p>
+
+  <h2>3. Permissions and why they are needed</h2>
+  <table>
+    <tr><th><code>tabs</code></th>
+      <td>Read the title, URL, and order of the tabs in your window so a workspace can be saved, and
+      create/activate/move/close tabs when one is restored or edited.</td></tr>
+    <tr><th><code>tabGroups</code></th>
+      <td>Bundle a restored workspace into a native Chrome tab group with its name and color, and
+      read an existing group when you choose “Save group”.</td></tr>
+    <tr><th><code>storage</code></th>
+      <td>Persist your saved groups and settings (section 1).</td></tr>
+    <tr><th><code>downloads</code></th>
+      <td>Write the JSON backup file when you click “Save”. The file is built locally and Chrome's
+      own save dialog asks where to put it.</td></tr>
+    <tr><th><code>sidePanel</code></th>
+      <td>Show the docked sidebar, the extension's main interface.</td></tr>
+    <tr><th>host access<br />(<code>http</code>/<code>https</code>)</th>
+      <td>Required for the pre-warming requests in section 2. A workspace can contain any site you
+      choose, so the permission cannot be narrowed to a fixed list of hosts.</td></tr>
+  </table>
+
+  <h2>4. Sharing</h2>
+  <p>Nothing is shared, because nothing is collected. Tabinet does not sell or transfer data to
+  third parties, does not use data for advertising, and does not use it for creditworthiness or
+  lending purposes.</p>
+
+  <h2>5. Your control over the data</h2>
+  <ul>
+    <li>Delete a single tab, a group, or all groups from the side panel or the editor.</li>
+    <li>Export everything to a JSON file (“Save”) and import it back (“Load”) — that file is yours
+      and is written only where you choose.</li>
+    <li>Turning “Sync across devices” off moves the data back to this device.</li>
+    <li>Uninstalling Tabinet removes its extension storage, including every saved group. Exported
+      JSON files are ordinary files and are not touched.</li>
+  </ul>
+
+  <h2>6. Children and sensitive data</h2>
+  <p>Tabinet is a general-purpose tab manager, is not directed at children, and does not request
+  health, financial, authentication, location, or personal-identity data.</p>
+
+  <h2>7. Changes</h2>
+  <p>If this policy changes, the updated version will be posted at this URL with a new “last
+  updated” date. Material changes will also be noted in the extension's changelog.</p>
+
+  <h2>8. Contact</h2>
+  <p>Questions or concerns about this policy can be raised at
+  <a href="https://github.com/AnSuHan/chrome-extension/issues">github.com/AnSuHan/chrome-extension/issues</a>.</p>
+
+  <!-- ===================== 한국어 ===================== -->
+  <section class="ko">
+    <h1>Tabinet 개인정보처리방침</h1>
+    <p class="sub">최종 수정일: 2026년 9월 5일</p>
+
+    <div class="lede">
+      <p><strong>Tabinet 은 어떠한 사용자 데이터도 수집·전송·판매하지 않습니다.</strong> 계정도,
+      분석 도구도, 추적도, 개발자가 운영하는 서버도 없습니다. 확장 프로그램이 저장하는 모든 것은
+      사용자의 브라우저 안에 머무릅니다.</p>
+    </div>
+
+    <h2>1. 저장하는 정보</h2>
+    <p>탭 그룹을 나중에 복원하기 위해 다음을 사용자 기기에 저장합니다.</p>
+    <ul>
+      <li>저장된 그룹의 <strong>이름과 색상</strong></li>
+      <li>그룹에 속한 각 탭의 <strong>제목과 URL</strong></li>
+      <li><strong>설정값</strong>(동기화, 백그라운드 유지, 프리로드, 자동 저장 2종)과 현재 창에
+        열려 있는 그룹 정보</li>
+    </ul>
+    <p>저장에는 <code>chrome.storage.local</code> 을 사용하며, 이 데이터는 기기를 벗어나지
+    않습니다.</p>
+    <p>사용자가 <strong>“Sync across devices”</strong> 를 직접 켠 경우에만
+    <code>chrome.storage.sync</code> 로 옮겨져, 사용자 <em>본인의 Google 계정</em>을 통해 다른
+    Chrome 에서도 보이게 됩니다. 이 전송은 Chrome 이 수행하며 Google 의 개인정보처리방침을 따르고,
+    Tabinet 개발자는 접근할 수 없습니다. 기본값은 꺼짐입니다.</p>
+
+    <h2>2. 네트워크 요청</h2>
+    <p>Tabinet 이 보내는 네트워크 요청은 한 종류뿐이며, 개발자에게 가는 요청은 없습니다.</p>
+    <p><strong>프리워밍.</strong> 저장한 워크스페이스를 열면 탭들이 우선 로컬 플레이스홀더로 열리고,
+    백그라운드에서 <em>그 탭들의 URL</em>(사용자가 직접 저장한 페이지)을 기존 쿠키와 함께 요청합니다.
+    DNS/TLS 연결과 로그인 리다이렉트를 미리 처리하고 문서를 Chrome 캐시에 올려 두기 위한 것으로,
+    탭을 클릭했을 때 로그인된 페이지가 곧바로 뜨게 합니다.</p>
+    <ul>
+      <li>응답을 <strong>렌더링·파싱·검사하지 않습니다.</strong> HTML 본문은 캐시에 적재되도록
+        흘려보낼 뿐이고, 그 외 형식은 헤더 수신 후 중단합니다.</li>
+      <li><strong>페이지 내용을 저장하거나 어디로도 보내지 않습니다.</strong></li>
+      <li>요청 대상은 <strong>사용자가 저장한 사이트</strong>뿐입니다. 제3자도, 개발자 서버도
+        관여하지 않습니다.</li>
+      <li>동시 요청 수·타임아웃·재요청 간격이 제한되어 있고, 워크스페이스를 벗어나면 즉시
+        취소됩니다.</li>
+    </ul>
+    <p>분석·텔레메트리·광고 SDK 는 없으며, 원격 코드도 사용하지 않습니다. 모든 JavaScript 는 확장
+    패키지에 포함되어 있습니다.</p>
+
+    <h2>3. 권한</h2>
+    <p><code>tabs</code>(탭 저장·복원), <code>tabGroups</code>(복원된 워크스페이스를 Chrome 탭
+    그룹으로 묶기), <code>storage</code>(1항의 저장), <code>downloads</code>(JSON 백업 저장),
+    <code>sidePanel</code>(사이드바 표시), 호스트 접근(2항의 프리워밍)에 사용됩니다. 워크스페이스에는
+    사용자가 고르는 어떤 사이트든 들어갈 수 있어 호스트 범위를 미리 좁힐 수 없습니다.</p>
+
+    <h2>4. 제3자 제공</h2>
+    <p>수집하는 정보가 없으므로 제공할 정보도 없습니다. 데이터를 판매하거나 제3자에게 전송하지 않고,
+    광고 목적이나 신용도 평가·대출 목적으로 사용하지 않습니다.</p>
+
+    <h2>5. 사용자의 통제권</h2>
+    <ul>
+      <li>사이드패널·에디터에서 탭 하나, 그룹 하나, 또는 전체를 삭제할 수 있습니다.</li>
+      <li>“Save” 로 전체를 JSON 파일로 내보내고 “Load” 로 되돌릴 수 있습니다.</li>
+      <li>동기화를 끄면 데이터가 다시 기기 안으로 돌아옵니다.</li>
+      <li>확장을 삭제하면 저장된 그룹을 포함한 확장 저장소가 함께 제거됩니다. 내보낸 JSON 파일은
+        일반 파일이므로 영향을 받지 않습니다.</li>
+    </ul>
+
+    <h2>6. 아동 및 민감정보</h2>
+    <p>Tabinet 은 일반적인 탭 관리 도구로 아동을 대상으로 하지 않으며, 건강·금융·인증·위치·개인 식별
+    정보를 요청하지 않습니다.</p>
+
+    <h2>7. 변경</h2>
+    <p>방침이 변경되면 이 URL 에 수정일과 함께 게시합니다.</p>
+
+    <h2>8. 문의</h2>
+    <p><a href="https://github.com/AnSuHan/chrome-extension/issues">github.com/AnSuHan/chrome-extension/issues</a></p>
+  </section>
+
+  <footer>
+    Tabinet is an open-source Chrome extension —
+    <a href="https://github.com/AnSuHan/chrome-extension">source on GitHub</a>.
+  </footer>
+</main>
+</body>
+</html>

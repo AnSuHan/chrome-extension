@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tabinet</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="header">
+      <img class="brand-icon" src="../../icons/icon48.png" alt="" />
+      <h1 class="logo">Tabinet</h1>
+      <button id="new-group-btn" class="icon-ghost" type="button" title="New empty group">
+        &#43;
+      </button>
+      <button id="editor-btn" class="icon-ghost" type="button" title="Open full editor">
+        &#9998;
+      </button>
+    </header>
+
+    <p id="toast" class="toast" role="status" hidden></p>
+
+    <!-- One-time hint: the side panel's left/right position is a Chrome setting,
+         not something the extension can control via the sidePanel API. -->
+    <div id="dock-hint" class="dock-hint" hidden>
+      <span class="dock-hint-ic">&#128161;</span>
+      <span class="dock-hint-text">
+        To move this panel to the left, right-click the panel and choose
+        <b>&ldquo;Show on left&rdquo;</b> (or Chrome Settings &rarr; Appearance
+        &rarr; Side panel).
+      </span>
+      <button
+        id="dock-hint-close"
+        class="dock-hint-close"
+        type="button"
+        title="Dismiss"
+        aria-label="Dismiss hint"
+      >
+        &times;
+      </button>
+    </div>
+
+    <main class="scroll">
+      <!-- Live tabs of the current window (Safari-style sidebar) -->
+      <section class="section" id="open-section">
+        <div class="section-head">
+          <span class="section-label">Open tabs</span>
+          <span id="open-count" class="section-count">0</span>
+          <button id="new-tab-btn" class="icon-ghost icon-ghost--sm" type="button" title="New tab">
+            &#43;
+          </button>
+        </div>
+        <!-- Shows which saved group these open tabs currently belong to. -->
+        <div id="active-badge" class="active-badge" hidden></div>
+        <ul id="open-list" class="open-list">
+          <!-- rendered by sidepanel.js -->
+        </ul>
+      </section>
+
+      <!-- Saved tab groups -->
+      <section class="section" id="saved-section">
+        <div class="section-head">
+          <span class="section-label">Saved groups</span>
+        </div>
+
+        <div class="actions">
+          <button id="save-window-btn" class="btn btn--primary" type="button">
+            <span class="ic">&#9633;</span> Save window
+          </button>
+          <button
+            id="save-group-btn"
+            class="btn"
+            type="button"
+            title="Save the tab group the active tab belongs to"
+          >
+            <span class="ic">&#9707;</span> Save group
+          </button>
+        </div>
+
+        <ul id="group-list" class="group-list">
+          <!-- rendered by sidepanel.js -->
+        </ul>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-icon">&#128194;</div>
+          <p class="empty-title">No saved groups yet</p>
+          <p class="empty-sub">
+            Save the current window or tab group to get started.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Right-click menu for the open-tabs list -->
+    <div id="ctx-menu" class="ctx-menu" hidden>
+      <button class="ctx-item" type="button" data-act="new">New tab</button>
+      <button class="ctx-item" type="button" data-act="duplicate">Duplicate tab</button>
+      <button class="ctx-item ctx-item--danger" type="button" data-act="close">Close tab</button>
+    </div>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>
