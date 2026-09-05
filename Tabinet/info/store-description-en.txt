@@ -1,0 +1,33 @@
+Tabinet is a tab cabinet: it groups, saves, and restores your tabs the way Safari's tab groups do — from a docked side panel that stays open while you browse.
+
+■ Two surfaces
+• Side panel — click the toolbar icon to dock the sidebar beside your page. Browse every saved group, expand it to see its tabs, and click a tab to open it. The page you are reading stays usable.
+• Full-page editor — a two-pane editor for detailed changes: edit titles and URLs inline, reorder by dragging, move tabs between groups, and import/export.
+
+■ Save a window, or just one group
+• Save window — snapshots every http(s) tab in the current window as a named, colored group.
+• Save group — snapshots only the tabs in the active tab's Chrome tab group, keeping its name and color.
+• New group (+) — create an empty group and fill it as you go.
+
+■ Workspaces that stay in sync
+Open all loads a group as the window's active workspace. Your previous tabs are saved back into their own group first, then closed — nothing is lost. While a group is the active workspace, browsing inside it is mirrored straight back into the saved group: navigating, opening, closing, and reordering tabs all follow, including the URL a login flow finally lands on. Close every tab in a workspace and Tabinet loads another group instead of letting the window (and Chrome) close.
+
+■ No cold loading
+Opening a workspace pre-loads all of its tabs in the background, a few at a time, inside that one window. By the time you click a tab it is already on its real, rendered page — no waiting for a cold load at the moment you click. Prefer a lighter footprint? Turn pre-loading off and tabs stay unloaded until clicked; they are still network-warmed, so the click is quicker than a cold start.
+
+■ Edit without leaving the sidebar
+• Double-click a group's name to rename it; click the color dot for a quick palette.
+• + Add current tab appends the page you are on.
+• × removes a tab; drag the handle to reorder tabs, or drop one onto another group's header to move it there.
+
+■ Options you control
+• Keep workspaces live in the background — the workspace you switch away from keeps running, so switching back is instant. Turn it off and Tabinet creates no Chrome tab groups at all. Each group can override the default: Default / Keep live / Close on switch.
+• Auto-save where tabs navigate — the saved workspace follows tabs to their new URLs, so it reopens where you left off.
+• Auto-save tabs you add or close — tabs opened or closed in the active workspace are added to or removed from the saved one. Turn both off and a saved workspace is frozen until you deliberately save over it.
+
+■ Your data stays yours
+Everything is stored locally in your browser by default; nothing leaves the device and there are no accounts, no servers, and no tracking. Save JSON exports all of your groups to a file, and Load JSON brings them back in either Merge or Replace all mode — that file is the explicit backup format. Optionally switch storage to your Google account (Chrome sync) so groups appear on every Chrome you are signed into; because Chrome's sync storage is small (~100 KB), Tabinet catches a quota error, keeps your data safe on this device, and tells you.
+
+Host access is used only to pre-warm the pages of tabs you already have open when you switch to a workspace. Nothing is sent anywhere.
+
+Requires Chrome 114 or later (Side Panel API).

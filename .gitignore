@@ -1,0 +1,4 @@
+# Store upload packages — built from source, kept out of the repo.
+# Rebuild with the zip step in Tabinet/info/README.md.
+dist/
+*.zip
