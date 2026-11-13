@@ -10,11 +10,14 @@
     <header class="header">
       <img class="brand-icon" src="../../icons/icon48.png" alt="" />
       <h1 class="logo">Tabinet</h1>
-      <button id="new-group-btn" class="icon-ghost" type="button" title="New empty group">
+      <button id="new-group-btn" class="icon-ghost" type="button" data-i18n-title="spNewGroupTitle">
         &#43;
       </button>
-      <button id="editor-btn" class="icon-ghost" type="button" title="Open full editor">
+      <button id="editor-btn" class="icon-ghost" type="button" data-i18n-title="spOpenEditorTitle">
         &#9998;
+      </button>
+      <button id="about-btn" class="icon-ghost" type="button" data-i18n-title="aboutOpenTitle">
+        &#9432;
       </button>
     </header>
 
@@ -24,17 +27,13 @@
          not something the extension can control via the sidePanel API. -->
     <div id="dock-hint" class="dock-hint" hidden>
       <span class="dock-hint-ic">&#128161;</span>
-      <span class="dock-hint-text">
-        To move this panel to the left, right-click the panel and choose
-        <b>&ldquo;Show on left&rdquo;</b> (or Chrome Settings &rarr; Appearance
-        &rarr; Side panel).
-      </span>
+      <span class="dock-hint-text" data-i18n-html="spDockHint"></span>
       <button
         id="dock-hint-close"
         class="dock-hint-close"
         type="button"
-        title="Dismiss"
-        aria-label="Dismiss hint"
+        data-i18n-title="dismiss"
+        data-i18n-aria-label="spDismissHint"
       >
         &times;
       </button>
@@ -44,9 +43,9 @@
       <!-- Live tabs of the current window (Safari-style sidebar) -->
       <section class="section" id="open-section">
         <div class="section-head">
-          <span class="section-label">Open tabs</span>
+          <span class="section-label" data-i18n="spOpenTabs"></span>
           <span id="open-count" class="section-count">0</span>
-          <button id="new-tab-btn" class="icon-ghost icon-ghost--sm" type="button" title="New tab">
+          <button id="new-tab-btn" class="icon-ghost icon-ghost--sm" type="button" data-i18n-title="newTab">
             &#43;
           </button>
         </div>
@@ -60,20 +59,20 @@
       <!-- Saved tab groups -->
       <section class="section" id="saved-section">
         <div class="section-head">
-          <span class="section-label">Saved groups</span>
+          <span class="section-label" data-i18n="spSavedGroups"></span>
         </div>
 
         <div class="actions">
           <button id="save-window-btn" class="btn btn--primary" type="button">
-            <span class="ic">&#9633;</span> Save window
+            <span class="ic">&#9633;</span> <span data-i18n="spSaveWindow"></span>
           </button>
           <button
             id="save-group-btn"
             class="btn"
             type="button"
-            title="Save the tab group the active tab belongs to"
+            data-i18n-title="spSaveGroupTitle"
           >
-            <span class="ic">&#9707;</span> Save group
+            <span class="ic">&#9707;</span> <span data-i18n="spSaveGroup"></span>
           </button>
         </div>
 
@@ -82,19 +81,17 @@
         </ul>
         <div id="empty" class="empty" hidden>
           <div class="empty-icon">&#128194;</div>
-          <p class="empty-title">No saved groups yet</p>
-          <p class="empty-sub">
-            Save the current window or tab group to get started.
-          </p>
+          <p class="empty-title" data-i18n="spEmptyTitle"></p>
+          <p class="empty-sub" data-i18n="spEmptySub"></p>
         </div>
       </section>
     </main>
 
     <!-- Right-click menu for the open-tabs list -->
     <div id="ctx-menu" class="ctx-menu" hidden>
-      <button class="ctx-item" type="button" data-act="new">New tab</button>
-      <button class="ctx-item" type="button" data-act="duplicate">Duplicate tab</button>
-      <button class="ctx-item ctx-item--danger" type="button" data-act="close">Close tab</button>
+      <button class="ctx-item" type="button" data-act="new" data-i18n="newTab"></button>
+      <button class="ctx-item" type="button" data-act="duplicate" data-i18n="spDuplicateTab"></button>
+      <button class="ctx-item ctx-item--danger" type="button" data-act="close" data-i18n="closeTab"></button>
     </div>
 
     <script type="module" src="sidepanel.js"></script>

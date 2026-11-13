@@ -22,10 +22,24 @@ const params = new URLSearchParams(location.search);
 const url = params.get("u") || "";
 const title = params.get("t") || "";
 
-if (title) document.title = title;
+// This page has to appear instantly, so it uses chrome.i18n (Chrome's UI
+// language, synchronous) rather than the editor's language setting, which
+// would mean fetching a catalog first.
+function msg(key) {
+  try {
+    return chrome.i18n?.getMessage?.(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+document.title = title || msg("lazyLoading") || document.title;
 
 const titleEl = document.getElementById("title");
 const hostEl = document.getElementById("host");
+const loadEl = document.getElementById("load");
+if (titleEl && msg("lazySavedTab")) titleEl.textContent = msg("lazySavedTab");
+if (loadEl && msg("lazyClickToLoad")) loadEl.textContent = msg("lazyClickToLoad");
 if (title && titleEl) titleEl.textContent = title;
 try {
   if (hostEl) hostEl.textContent = new URL(url).hostname.replace(/^www\./, "");

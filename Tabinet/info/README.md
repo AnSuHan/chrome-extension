@@ -2,7 +2,7 @@
 
 Everything needed to fill in the Chrome Web Store listing for Tabinet. None of
 this ships with the extension — the upload package contains only
-`manifest.json`, `icons/`, and `src/`.
+`manifest.json`, `_locales/`, `icons/`, and `src/`.
 
 | Path | What it is |
 |---|---|
@@ -32,6 +32,7 @@ Remove-Item "$env:TEMP\tabinet-pack" -Recurse -Force -ErrorAction SilentlyContin
 New-Item -ItemType Directory -Force "$stage\icons" | Out-Null
 Copy-Item Tabinet\manifest.json $stage
 Copy-Item Tabinet\src "$stage\src" -Recurse
+Copy-Item Tabinet\_locales "$stage\_locales" -Recurse
 Copy-Item Tabinet\icons\*.png "$stage\icons"
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -49,4 +50,5 @@ Remove-Item "$env:TEMP\tabinet-pack" -Recurse -Force
 
 `Compress-Archive` is deliberately not used: it writes entry paths with
 backslashes, which the store can reject. `manifest.json` must sit at the zip
-root, and `docs/`, `test/`, and `info/` must stay out of it.
+root next to `_locales/` (the manifest sets `default_locale`, so Chrome refuses
+the package without it), and `docs/`, `test/`, and `info/` must stay out of it.

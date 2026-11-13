@@ -1,0 +1,383 @@
+{
+  "extDescription": {
+    "message": "タブをまとめて保存・復元 — Chrome のための Safari 風タブグループ。"
+  },
+  "extActionTitle": {
+    "message": "Tabinet — タブグループのサイドバーを開く"
+  },
+  "lazyLoading": {
+    "message": "読み込み中…"
+  },
+  "lazySavedTab": {
+    "message": "保存済みタブ"
+  },
+  "lazyClickToLoad": {
+    "message": "クリックして読み込む"
+  },
+  "newTab": {
+    "message": "新しいタブ"
+  },
+  "closeTab": {
+    "message": "タブを閉じる"
+  },
+  "removeTab": {
+    "message": "タブを削除"
+  },
+  "untitled": {
+    "message": "無題"
+  },
+  "groupName": {
+    "message": "グループ名"
+  },
+  "newGroupName": {
+    "message": "新しいグループ"
+  },
+  "deleteGroup": {
+    "message": "グループを削除"
+  },
+  "deleteGroupNamed": {
+    "message": "グループ「$1」を削除"
+  },
+  "deletedNamed": {
+    "message": "「$1」を削除しました。"
+  },
+  "movedTabTo": {
+    "message": "タブを「$1」に移動しました。"
+  },
+  "alreadySaved": {
+    "message": "「$1」は保存済みです。"
+  },
+  "dragTabTitle": {
+    "message": "ドラッグで並べ替え、グループに重ねると移動"
+  },
+  "dismiss": {
+    "message": "閉じる"
+  },
+  "backupGroupName": {
+    "message": "バックアップ（未保存のタブ）"
+  },
+  "defaultWindowGroupName": {
+    "message": "ウィンドウ — $1"
+  },
+  "languageLabel": {
+    "message": "言語"
+  },
+  "languageAuto": {
+    "message": "自動（Chrome の言語）"
+  },
+  "aboutLink": {
+    "message": "バージョン $1 · 更新履歴"
+  },
+  "aboutOpenTitle": {
+    "message": "バージョンと更新履歴"
+  },
+  "color_grey": {
+    "message": "グレー"
+  },
+  "color_blue": {
+    "message": "青"
+  },
+  "color_red": {
+    "message": "赤"
+  },
+  "color_yellow": {
+    "message": "黄"
+  },
+  "color_green": {
+    "message": "緑"
+  },
+  "color_pink": {
+    "message": "ピンク"
+  },
+  "color_purple": {
+    "message": "紫"
+  },
+  "color_cyan": {
+    "message": "シアン"
+  },
+  "color_orange": {
+    "message": "オレンジ"
+  },
+  "spNewGroupTitle": {
+    "message": "空のグループを作成"
+  },
+  "spOpenEditorTitle": {
+    "message": "エディタを開く"
+  },
+  "spDockHint": {
+    "message": "このパネルを左に移すには、パネルを右クリックして<b>「左側に表示」</b>を選びます（または Chrome の設定 → デザイン → サイドパネル）。"
+  },
+  "spDismissHint": {
+    "message": "ヒントを閉じる"
+  },
+  "spViewing": {
+    "message": "表示中"
+  },
+  "spOpenTabs": {
+    "message": "開いているタブ"
+  },
+  "spSavedGroups": {
+    "message": "保存済みグループ"
+  },
+  "spSaveWindow": {
+    "message": "ウィンドウを保存"
+  },
+  "spSaveGroup": {
+    "message": "グループを保存"
+  },
+  "spSaveGroupTitle": {
+    "message": "アクティブなタブが属するタブグループを保存"
+  },
+  "spEmptyTitle": {
+    "message": "保存済みグループはまだありません"
+  },
+  "spEmptySub": {
+    "message": "現在のウィンドウかタブグループを保存して始めましょう。"
+  },
+  "spDuplicateTab": {
+    "message": "タブを複製"
+  },
+  "spActiveBadgeTitle": {
+    "message": "これらのタブは保存済みグループ「$1」に属しています"
+  },
+  "spNoOpenTabs": {
+    "message": "開いているタブはありません。"
+  },
+  "spCantAddPage": {
+    "message": "このページは追加できません。"
+  },
+  "spAddedCurrentTab": {
+    "message": "現在のタブを追加しました。"
+  },
+  "spRenamedTo": {
+    "message": "「$1」に名前を変更しました。"
+  },
+  "spChangeColor": {
+    "message": "色を変更"
+  },
+  "spRenameGroup": {
+    "message": "グループ名を変更"
+  },
+  "spReopen": {
+    "message": "開き直す"
+  },
+  "spOpenAll": {
+    "message": "すべて開く"
+  },
+  "spSwitchingTo": {
+    "message": "「$1」に切り替え中…"
+  },
+  "spNoTabsYet": {
+    "message": "タブはまだありません。"
+  },
+  "spAddCurrentTab": {
+    "message": "+ 現在のタブを追加"
+  },
+  "spSavedWindow": {
+    "message": "このウィンドウを保存しました。"
+  },
+  "spNothingToSave": {
+    "message": "このウィンドウに保存できるタブはありません。"
+  },
+  "spSavedGroup": {
+    "message": "グループ「$1」を保存しました。"
+  },
+  "spNotInGroup": {
+    "message": "アクティブなタブはグループに属していません。"
+  },
+  "spCreatedGroup": {
+    "message": "新しいグループを作成しました。"
+  },
+  "mgPageTitle": {
+    "message": "Tabinet — グループ管理"
+  },
+  "mgNewGroup": {
+    "message": "+ 新しいグループ"
+  },
+  "mgGroupListLabel": {
+    "message": "タブグループ"
+  },
+  "mgSync": {
+    "message": "デバイス間で同期"
+  },
+  "mgSyncTitle": {
+    "message": "グループを Google アカウントに同期し、ログイン中のすべてのデバイスに表示します（容量は小さめ — README 参照）。"
+  },
+  "mgKeepLive": {
+    "message": "ワークスペースをバックグラウンドで維持"
+  },
+  "mgKeepLiveTitle": {
+    "message": "オン：離れたワークスペースが Chrome のタブグループとして動き続けるため、すぐに戻れます — ただし Chrome は動作中のタブグループをブックマークバーに表示します。オフ：Tabinet はタブグループを作らないため、ブックマークバーには何も残らず、戻るときに（事前ウォームアップ済みで）開き直します。ワークスペースごとに上書きできます。"
+  },
+  "mgPreload": {
+    "message": "ワークスペースを開くときにタブを先読み"
+  },
+  "mgPreloadTitle": {
+    "message": "オン：ワークスペースを開くと、タブを数件ずつバックグラウンドで読み込むため、クリックすると読み込み済みのページが表示されます。オフ：タブはクリックするまで読み込まれず（メモリを節約）、ネットワークの事前ウォームアップのみ行います。"
+  },
+  "mgAutoSaveChanges": {
+    "message": "タブの移動先を自動保存"
+  },
+  "mgAutoSaveChangesTitle": {
+    "message": "オン：アクティブなワークスペースのタブが移動すると保存内容も追従し、次回は続きから開きます。オフ：保存したタブは保存時の URL のままです。"
+  },
+  "mgAutoSaveCount": {
+    "message": "タブの追加・クローズを自動保存"
+  },
+  "mgAutoSaveCountTitle": {
+    "message": "オン：アクティブなワークスペースで開いた/閉じたタブが保存内容に追加/削除されます。オフ：保存時のタブ数を維持します — 上のオプションがオンなら移動先は保存されます。"
+  },
+  "mgBookmarksHint": {
+    "message": "Chrome のブックマークバーのタブグループ表示は完全に隠せます：ブックマークバーを右クリックし、<b>タブグループを表示</b>のチェックを外します。"
+  },
+  "mgImportModeTitle": {
+    "message": "JSON 読み込みの適用方法"
+  },
+  "mgMerge": {
+    "message": "統合"
+  },
+  "mgReplaceAll": {
+    "message": "すべて置換"
+  },
+  "mgLoad": {
+    "message": "読み込み"
+  },
+  "mgSave": {
+    "message": "保存"
+  },
+  "mgDragGroupTitle": {
+    "message": "ドラッグで並べ替え"
+  },
+  "mgSidebarEmpty": {
+    "message": "グループはまだありません。上から作成してください。"
+  },
+  "mgTitlePlaceholder": {
+    "message": "タイトル"
+  },
+  "mgOpenInNewTab": {
+    "message": "新しいタブで開く"
+  },
+  "mgNoGroupsTitle": {
+    "message": "グループはまだありません"
+  },
+  "mgNoGroupsSub": {
+    "message": "左側でグループを作成してタブを追加しましょう。"
+  },
+  "mgSelectTitle": {
+    "message": "グループを選択"
+  },
+  "mgSelectSub": {
+    "message": "左側でグループを選ぶと、タブを表示・編集できます。"
+  },
+  "mgGroupColor": {
+    "message": "グループの色"
+  },
+  "mgKeepSelectTitle": {
+    "message": "維持：切り替えてもこのワークスペースは Chrome のタブグループとして動き続けます（すぐ戻れるが、ブックマークバーに表示）。切り替え時に閉じる：タブを保存して閉じ、何も残しません。"
+  },
+  "mgKeepDefault": {
+    "message": "既定（$1）"
+  },
+  "mgLiveShort": {
+    "message": "維持"
+  },
+  "mgCloseShort": {
+    "message": "切り替え時に閉じる"
+  },
+  "mgKeepOn": {
+    "message": "維持"
+  },
+  "mgKeepOff": {
+    "message": "切り替え時に閉じる"
+  },
+  "mgRestore": {
+    "message": "復元"
+  },
+  "mgRestoring": {
+    "message": "「$1」を復元中…"
+  },
+  "mgDelete": {
+    "message": "削除"
+  },
+  "mgTabsEmpty": {
+    "message": "このグループにはまだタブがありません。下から追加してください。"
+  },
+  "mgAddTab": {
+    "message": "+ タブを追加"
+  },
+  "mgTip": {
+    "message": "ヒント：⋮⋮ をドラッグしてタブを並べ替えたり、左のグループに重ねて移動したりできます。"
+  },
+  "mgToastPreloadOn": {
+    "message": "ワークスペースを開くとタブをバックグラウンドで読み込みます — クリックするとすぐ表示されます。"
+  },
+  "mgToastPreloadOff": {
+    "message": "タブはクリックしたときだけ読み込みます — メモリは軽く、最初のクリックは遅くなります。"
+  },
+  "mgToastChangesOn": {
+    "message": "保存したワークスペースがタブの移動に追従します。"
+  },
+  "mgToastChangesOff": {
+    "message": "保存したタブは保存時の URL を維持します。"
+  },
+  "mgToastCountOn": {
+    "message": "開いた/閉じたタブがワークスペースに保存されます。"
+  },
+  "mgToastCountOff": {
+    "message": "保存したワークスペースはタブ数を維持します。タブを開閉しても変わりません。"
+  },
+  "mgToastKeepOn": {
+    "message": "ワークスペースはバックグラウンドで維持されます — Chrome がブックマークバーに表示します。"
+  },
+  "mgToastKeepOff": {
+    "message": "切り替えるとワークスペースを閉じます — ブックマークバーには何も残りません。"
+  },
+  "mgToastSyncOn": {
+    "message": "同期オン — グループは Google アカウントに保存されます。"
+  },
+  "mgToastSyncOff": {
+    "message": "同期オフ — グループはこのデバイスにのみ保存されます。"
+  },
+  "mgToastSyncFail": {
+    "message": "同期をオンにできません：同期ストレージの容量（約 100KB）を超えています。ローカルのままにします。"
+  },
+  "mgToastAreaFail": {
+    "message": "ストレージを切り替えられません。以前の設定を維持します。"
+  },
+  "mgNothingToExport": {
+    "message": "保存するものがありません。"
+  },
+  "mgReplaced": {
+    "message": "$1 件のグループで置き換えました。"
+  },
+  "mgMerged": {
+    "message": "$1 件のグループを統合しました。"
+  },
+  "mgLoadFailed": {
+    "message": "読み込み失敗：有効な Tabinet の JSON ファイルではありません。"
+  },
+  "aboutPageTitle": {
+    "message": "Tabinet — バージョンと更新履歴"
+  },
+  "aboutInstalled": {
+    "message": "インストール中のバージョン"
+  },
+  "aboutTagline": {
+    "message": "タブをまとめて、保存して、復元。"
+  },
+  "aboutHistory": {
+    "message": "更新履歴"
+  },
+  "aboutCurrent": {
+    "message": "現在のバージョン"
+  },
+  "aboutType_new": {
+    "message": "新機能"
+  },
+  "aboutType_improved": {
+    "message": "改善"
+  },
+  "aboutType_fixed": {
+    "message": "修正"
+  }
+}

@@ -31,6 +31,7 @@
 
 import { HYDRATE_LIMIT, cancelHydrate, hydrateTabs } from "./hydrate.js";
 import { cancelWarm, warmUrls } from "./prewarm.js";
+import { initI18n, t } from "../lib/i18n.js";
 import {
   addGroup,
   getGroups,
@@ -53,12 +54,53 @@ function enableSidePanelOnAction() {
 enableSidePanelOnAction();
 chrome.runtime.onInstalled.addListener(enableSidePanelOnAction);
 
-const isSavable = (t) => t.url && /^https?:/.test(t.url);
+const isSavable = (tab) => tab.url && /^https?:/.test(tab.url);
 
-/** Capture the tabs of the current window into a saved group. */
-async function saveCurrentWindow({ name, color } = {}) {
-  const tabs = await chrome.tabs.query({ currentWindow: true });
-  return addGroup({ name, color, tabs: tabs.filter(isSavable) });
+/**
+ * Capture what the current window SHOWS into a saved group.
+ *
+ * Only visible tabs count: ungrouped ones and those in expanded groups. Tabs in
+ * a collapsed group belong to another (background) workspace — folding them in
+ * made every "Save window" a merged copy of all loaded workspaces. Tabs still
+ * on the lazy placeholder are saved under their real url.
+ *
+ * Returns:
+ *  - { status: "duplicate", group } the same set of urls is already saved
+ *  - { status: "empty" }            nothing savable is on screen
+ *  - { status: "saved", group }     a new group was saved
+ *
+ * Saving an unchanged window twice used to add a second identical group every
+ * time; now the existing one is reported instead.
+ */
+async function saveCurrentWindow({ name, color, windowId } = {}) {
+  if (windowId == null) {
+    const win = await chrome.windows.getCurrent().catch(() => null);
+    windowId = win?.id;
+  }
+  if (windowId == null) return { status: "empty" };
+  const snap = snapshotTabs(await visibleTabs(windowId));
+  if (!snap.length) return { status: "empty" };
+  const key = tabsKey(snap);
+  const dup = (await getGroups()).find((g) => tabsKey(g.tabs) === key);
+  if (dup) return { status: "duplicate", group: dup };
+  await initI18n();
+  const group = await addGroup({
+    name: name || t("defaultWindowGroupName", new Date().toLocaleDateString()),
+    color,
+    tabs: snap,
+  });
+  return { status: "saved", group };
+}
+
+/** The tabs a window shows: ungrouped ones plus those in expanded groups. */
+async function visibleTabs(windowId) {
+  const all = await chrome.tabs.query({ windowId }).catch(() => []);
+  const collapsed = new Set(
+    (await chrome.tabGroups.query({ windowId, collapsed: true }).catch(() => [])).map(
+      (g) => g.id,
+    ),
+  );
+  return all.filter((tab) => !collapsed.has(tab.groupId));
 }
 
 /** Do two tab lists hold the same urls in the same order? (skips no-op writes) */
@@ -531,6 +573,144 @@ async function evictWorkspaces(windowId) {
   for (const savedId of evicted) await closeWorkspaceTabs(windowId, savedId);
 }
 
+/* ------------------------------------------------------------------ *
+ * Re-attaching workspaces after a browser restart
+ *
+ * Window ids and tab-group ids are only valid for one browser session. Chrome
+ * restores the window — including every live workspace's native tab group —
+ * but with NEW ids, so the bookkeeping above no longer points at them. Left
+ * alone, each restored group became an orphan: the next switch opened the
+ * workspace again as a second group, the old one stayed in the tab strip and
+ * the bookmarks bar, and every restart added another copy.
+ *
+ * So the bookkeeping is reset when the browser starts (old ids could even
+ * collide with new ones and make us collapse or close the wrong group), and
+ * each window's restored groups are matched back to their saved workspaces by
+ * title. A second copy of a workspace that is already attached is folded into
+ * the first: tabs it has that the first lacks move over, exact duplicates
+ * close. Groups whose title matches no saved workspace are the user's own and
+ * are never touched.
+ * ------------------------------------------------------------------ */
+
+/** Forget every window's workspace bookkeeping (ids from a past session). */
+async function resetSessionState() {
+  await chrome.storage.local.remove([WS_MAP_KEY, WS_ORDER_KEY, ACTIVE_KEY]);
+}
+
+/** A native group's tabs and their effective urls. */
+async function groupTabUrls(windowId, gid) {
+  const tabs = await chrome.tabs.query({ windowId, groupId: gid }).catch(() => []);
+  return { tabs, urls: tabs.map((tab) => effectiveTab(tab).url) };
+}
+
+/** How many of `urls` the saved group holds. */
+function overlap(group, urls) {
+  const have = new Set(group.tabs.map((tab) => tab.url));
+  return urls.reduce((n, u) => n + (have.has(u) ? 1 : 0), 0);
+}
+
+/**
+ * Fold the duplicate native group `dupGid` into `keepGid`: tabs whose url the
+ * kept group lacks move over, the rest close. The duplicate group is dissolved
+ * (ungrouped first, so Chrome doesn't keep it as a saved bookmarks-bar chip).
+ */
+async function foldDuplicateGroup(windowId, dupGid, keepGid) {
+  const { urls: keepUrls } = await groupTabUrls(windowId, keepGid);
+  const have = new Set(keepUrls);
+  const { tabs } = await groupTabUrls(windowId, dupGid);
+  const move = [];
+  const close = [];
+  for (const tab of tabs) {
+    const u = effectiveTab(tab).url;
+    if (/^https?:/.test(u) && !have.has(u)) {
+      have.add(u);
+      move.push(tab.id);
+    } else {
+      close.push(tab.id);
+    }
+  }
+  await withSwitchGuard(windowId, async () => {
+    if (move.length) {
+      await chrome.tabs.group({ tabIds: move, groupId: keepGid }).catch(() => {});
+    }
+    if (close.length) {
+      await chrome.tabs.ungroup(close).catch(() => {});
+      await chrome.tabs.remove(close).catch(() => {});
+    }
+  });
+}
+
+/**
+ * Match a window's native tab groups back to saved workspaces (see above), and
+ * work out which workspace the window is showing if that was lost too.
+ * Safe to run any time: already-attached groups are left as they are.
+ */
+async function adoptWindowGroups(windowId) {
+  const groups = await getGroups();
+  if (!groups.length) return;
+  const native = await chrome.tabGroups.query({ windowId }).catch(() => []);
+  const nativeIds = new Set(native.map((g) => g.id));
+
+  const map = await getWsMap(windowId);
+  for (const [sid, gid] of Object.entries(map)) {
+    if (!nativeIds.has(gid)) delete map[sid]; // that group is gone
+  }
+  const order = (await getWsOrder(windowId)).filter((sid) => sid in map);
+  const attached = new Set(Object.values(map));
+
+  for (const ng of native) {
+    if (attached.has(ng.id)) continue;
+    const named = groups.filter((g) => g.name === (ng.title ?? ""));
+    if (!named.length) continue; // not one of ours
+    const { urls } = await groupTabUrls(windowId, ng.id);
+    const byOverlap = (a, b) => overlap(b, urls) - overlap(a, urls);
+    const free = named.filter((g) => map[g.id] == null).sort(byOverlap)[0];
+    if (free) {
+      map[free.id] = ng.id;
+      attached.add(ng.id);
+      if (ng.collapsed) order.push(free.id); // background workspace: LRU end
+      else order.unshift(free.id);
+      continue;
+    }
+    // Every same-named workspace is already attached: this is a stale copy.
+    const keep = named.filter((g) => map[g.id] != null).sort(byOverlap)[0];
+    await foldDuplicateGroup(windowId, ng.id, map[keep.id]);
+  }
+  await setWsMap(windowId, map);
+  await setWsOrder(windowId, order);
+
+  // Which workspace is on screen? Keep a still-valid answer; otherwise take the
+  // group holding the active tab, or — for a workspace that runs ungrouped —
+  // a saved group whose urls the window's ungrouped tabs match exactly. (Only
+  // exactly: live sync would otherwise overwrite that group with this window.)
+  const activeId = await getActiveGroup(windowId);
+  if (activeId && groups.some((g) => g.id === activeId)) return;
+  const [activeTab] = await chrome.tabs
+    .query({ windowId, active: true })
+    .catch(() => []);
+  if (activeTab && activeTab.groupId != null && activeTab.groupId !== NONE) {
+    const sid = Object.keys(map).find((k) => map[k] === activeTab.groupId);
+    if (sid) await setActiveGroup(windowId, sid);
+    return;
+  }
+  const loose = snapshotTabs(
+    await chrome.tabs.query({ windowId, groupId: NONE }).catch(() => []),
+  );
+  if (!loose.length) return;
+  const key = tabsKey(loose);
+  const match = groups.find((g) => map[g.id] == null && tabsKey(g.tabs) === key);
+  if (match) await setActiveGroup(windowId, match.id);
+}
+
+async function adoptAllWindows() {
+  const wins = await chrome.windows
+    .getAll({ windowTypes: ["normal"] })
+    .catch(() => []);
+  for (const w of wins) {
+    await adoptWindowGroups(w.id).catch((e) => console.warn("Tabinet adopt:", e));
+  }
+}
+
 /**
  * Open every tab of a saved group (ungrouped, additive) in one window — the
  * given one, else the current one. Everything stays inside that single window;
@@ -561,16 +741,45 @@ async function restoreGroup(id, windowId = null) {
   warmWorkspace(windowId, { tabIds: opened.map((t) => t.id) });
 }
 
+// The backup group keeps at most this many tabs (newest last), so it stays
+// well inside chrome.storage.sync's per-item quota.
+const BACKUP_MAX_TABS = 100;
+
 /**
- * Persist unsaved ungrouped tabs before we clear them, so a first-ever switch
- * from a not-yet-tracked window never loses them: adopt a matching saved group
- * if the tabs already belong to one, else drop a one-time "Backup —" group.
+ * Persist unsaved ungrouped tabs before we clear them, so a switch from a
+ * window with no tracked workspace never loses them.
+ *
+ * This used to add a fresh "Backup — <date>" group on EVERY such switch (each
+ * new window, every browser restart), so saved groups piled up endlessly. Now:
+ *  - tabs whose url is already in some saved group are skipped — closing them
+ *    loses nothing;
+ *  - whatever is left goes into ONE shared backup group (flagged `backup`),
+ *    appended and de-duplicated, capped at BACKUP_MAX_TABS.
  */
 async function persistUnsavedTabs(current, groups) {
   if (!current.length) return;
-  const key = tabsKey(current);
-  if (groups.some((g) => tabsKey(g.tabs) === key)) return; // already saved
-  await addGroup({ name: `Backup — ${new Date().toLocaleString()}`, tabs: current });
+  const saved = new Set(groups.flatMap((g) => g.tabs.map((tab) => tab.url)));
+  const fresh = [];
+  for (const tab of current) {
+    if (saved.has(tab.url)) continue;
+    saved.add(tab.url); // also drops repeats within `current`
+    fresh.push(tab);
+  }
+  if (!fresh.length) return; // everything is already saved somewhere
+
+  const backup = groups.find((g) => g.backup === true);
+  if (backup) {
+    const tabs = [...backup.tabs, ...fresh].slice(-BACKUP_MAX_TABS);
+    await updateGroup(backup.id, { tabs });
+    return;
+  }
+  await initI18n();
+  await addGroup({
+    name: t("backupGroupName"),
+    color: "grey",
+    tabs: fresh.slice(-BACKUP_MAX_TABS),
+    backup: true,
+  });
 }
 
 /**
@@ -593,6 +802,10 @@ async function switchToGroup(id, windowId) {
     windowId = w?.id;
   }
   if (windowId == null) return restoreGroup(id); // no window: plain additive open
+
+  // Re-attach restored/orphaned groups first, so the target is reused instead
+  // of opened a second time and the outgoing workspace is recognised.
+  await adoptWindowGroups(windowId).catch((e) => console.warn("Tabinet adopt:", e));
 
   const prevId = await getActiveGroup(windowId);
   if (prevId === id) {
@@ -833,6 +1046,16 @@ async function reconcileWorkspaces() {
  * Event wiring
  * ------------------------------------------------------------------ */
 
+// A new browser session: drop last session's ids and re-attach the restored
+// workspaces. Session restore can finish after onStartup fires, so look again
+// a little later (adoption is idempotent).
+chrome.runtime.onStartup?.addListener(() => {
+  resetSessionState()
+    .then(adoptAllWindows)
+    .catch((e) => console.warn("Tabinet startup:", e));
+  setTimeout(() => adoptAllWindows().catch(() => {}), 5000);
+});
+
 chrome.tabs.onCreated.addListener((tab) => {
   const wid = tab.windowId;
   if (wid == null || switching.has(wid)) return; // our own switch churn
@@ -896,9 +1119,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
-      case "SAVE_CURRENT_WINDOW":
-        sendResponse({ ok: true, group: await saveCurrentWindow(msg.payload) });
+      case "SAVE_CURRENT_WINDOW": {
+        const res = await saveCurrentWindow(msg.payload);
+        sendResponse({ ok: res.status !== "empty", ...res });
         break;
+      }
       case "SAVE_CURRENT_GROUP": {
         const res = await saveCurrentGroup();
         sendResponse({ ok: res.status !== "no-group", ...res });

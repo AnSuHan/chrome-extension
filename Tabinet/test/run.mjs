@@ -33,6 +33,7 @@ const suites = [
   "lazy.test.mjs",
   "snapshot.test.mjs",
   "worker.test.mjs",
+  "groups.test.mjs",
 ];
 let failed = 0;
 for (const suite of suites) {

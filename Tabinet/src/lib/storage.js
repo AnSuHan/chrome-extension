@@ -7,7 +7,9 @@
  *     name: string,
  *     color: string,       // chrome tabGroups color name (e.g. "blue")
  *     createdAt: number,   // epoch ms
- *     tabs: [{ title, url }]
+ *     tabs: [{ title, url }],
+ *     keepLoaded?: boolean, // per-group override of the global setting
+ *     backup?: true,        // the one shared "unsaved tabs" backup group
  *   }
  *
  * Groups are stored **sharded**: an index key holds the ordered list of ids,
@@ -43,8 +45,11 @@ const SETTINGS_KEY = "tabinet.settings";
 // They are independent: keep changes on and count off to let a workspace stay
 // exactly the size you saved it while still following where its tabs go; turn
 // both off to freeze the saved copy until you save over it deliberately.
+// language — UI language: "auto" follows Chrome's UI language, or a code from
+// src/lib/i18n.js SUPPORTED_LANGUAGES ("en", "ko", "ja").
 const DEFAULT_SETTINGS = {
   area: "local",
+  language: "auto",
   keepLoaded: true,
   preloadTabs: true,
   autoSaveChanges: true,
@@ -181,7 +186,7 @@ export async function getGroups() {
 }
 
 /** Add a new saved group and return it. */
-export async function addGroup({ name, color, tabs }) {
+export async function addGroup({ name, color, tabs, backup = false }) {
   const store = await area();
   await migrateIfNeeded(store);
   const group = {
@@ -191,6 +196,7 @@ export async function addGroup({ name, color, tabs }) {
     createdAt: Date.now(),
     tabs: (tabs ?? []).map((t) => ({ title: t.title ?? "", url: t.url ?? "" })),
   };
+  if (backup) group.backup = true;
   const idx = await getIndex(store);
   await store.set({ [groupKey(group.id)]: group, [INDEX_KEY]: [group.id, ...idx] });
   return group;
@@ -272,6 +278,7 @@ function coerceGroup(raw) {
   };
   // Only carried when the group overrides the global setting.
   if (typeof raw.keepLoaded === "boolean") group.keepLoaded = raw.keepLoaded;
+  if (raw.backup === true) group.backup = true;
   return group;
 }
 

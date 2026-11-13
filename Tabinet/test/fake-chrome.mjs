@@ -4,7 +4,13 @@
  * navigations complete, events fire.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const EXT = "chrome-extension://tabinet";
+// The extension root (Tabinet/), for serving its own files (e.g. _locales).
+const EXT_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const LAZY_PAGE = `${EXT}/src/lazy/lazy.html`;
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -28,6 +34,7 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
   };
 
   const tabs = new Map();
+  const groups = new Map(); // gid -> { id, windowId, title, color, collapsed }
   const ports = new Map(); // tabId -> the placeholder's port (page side)
   let nextTabId = 1;
   let nextGroupId = 100;
@@ -65,6 +72,8 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
       getURL: (p) => `${EXT}/${p}`,
       lastError: undefined,
       onInstalled: evt(),
+      onStartup: evt(),
+      getManifest: () => ({ version: "0.0.0-test" }),
       onMessage: evt(),
       onConnect,
       connect: () => {
@@ -94,6 +103,7 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
     },
     windows: {
       getCurrent: async () => ({ id: 1 }),
+      getAll: async () => [{ id: 1, type: "normal" }],
       update: async () => {},
       create: async () => {
         log.windowsCreated += 1;
@@ -103,9 +113,22 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
     },
     tabGroups: {
       TAB_GROUP_ID_NONE: -1,
-      get: async (gid) => ({ id: gid, windowId: 1, collapsed: false }),
-      update: async () => {},
-      query: async () => [],
+      get: async (gid) => {
+        const g = groups.get(gid);
+        if (!g) throw new Error("No group with id: " + gid);
+        return { ...g };
+      },
+      update: async (gid, props) => {
+        const g = groups.get(gid);
+        if (!g) throw new Error("No group with id: " + gid);
+        Object.assign(g, props);
+        return { ...g };
+      },
+      query: async ({ windowId, collapsed } = {}) =>
+        [...groups.values()]
+          .filter((g) => windowId == null || g.windowId === windowId)
+          .filter((g) => collapsed == null || g.collapsed === collapsed)
+          .map((g) => ({ ...g })),
       onUpdated: evt(),
       onRemoved: evt(),
     },
@@ -161,14 +184,18 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
         if (!t) throw new Error("No tab with id " + id);
         return clone(t);
       },
-      query: async ({ windowId, groupId } = {}) =>
+      query: async ({ windowId, groupId, active } = {}) =>
         [...tabs.values()]
           .filter((t) => windowId == null || t.windowId === windowId)
           .filter((t) => groupId == null || t.groupId === groupId)
+          .filter((t) => active == null || t.active === active)
           .map(clone),
       update: async (id, props) => {
         const t = tabs.get(id);
         if (!t) throw new Error("No tab with id " + id);
+        if (props.active) {
+          for (const o of tabs.values()) if (o.windowId === t.windowId) o.active = false;
+        }
         if (props.active != null) t.active = props.active;
         if (props.url) navigate(id, "update");
         return clone(t);
@@ -183,11 +210,16 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
       },
       group: async ({ tabIds, groupId, createProperties }) => {
         const gid = groupId ?? nextGroupId++;
+        if (!groups.has(gid)) {
+          if (groupId != null) throw new Error("No group with id: " + gid);
+          const windowId = createProperties?.windowId ?? tabs.get(tabIds[0])?.windowId ?? 1;
+          groups.set(gid, { id: gid, windowId, title: "", color: "grey", collapsed: false });
+        }
         for (const id of tabIds) {
           const t = tabs.get(id);
           if (t) t.groupId = gid;
         }
-        void createProperties;
+        pruneGroups();
         return gid;
       },
       ungroup: async (ids) => {
@@ -195,6 +227,7 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
           const t = tabs.get(id);
           if (t) t.groupId = -1;
         }
+        pruneGroups();
       },
       remove: async (ids) => {
         for (const id of [].concat(ids)) {
@@ -202,12 +235,48 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
           tabs.delete(id);
           onRemoved.fire(id, { windowId: 1, isWindowClosing: false });
         }
+        pruneGroups();
       },
     },
   };
 
+  // Chrome drops a tab group the moment its last tab leaves it.
+  function pruneGroups() {
+    for (const gid of groups.keys()) {
+      if (![...tabs.values()].some((t) => t.groupId === gid)) groups.delete(gid);
+    }
+  }
+
+  /**
+   * Put tabs into a native group as a browser restart would restore it: a
+   * group with a title/colour, unknown to the worker's bookkeeping.
+   */
+  function restoreGroup({ windowId = 1, title, color = "blue", collapsed = false, urls }) {
+    const gid = nextGroupId++;
+    groups.set(gid, { id: gid, windowId, title, color, collapsed });
+    for (const url of urls) {
+      const tab = { id: nextTabId++, url, windowId, active: false, groupId: gid, status: "complete" };
+      tabs.set(tab.id, tab);
+    }
+    return gid;
+  }
+
+  /** A plain tab that was already open (not created through the worker). */
+  function addTab({ windowId = 1, url, active = false, groupId = -1 }) {
+    const tab = { id: nextTabId++, url, windowId, active, groupId, status: "complete" };
+    tabs.set(tab.id, tab);
+    return tab.id;
+  }
+
   globalThis.chrome = chrome;
   globalThis.fetch = async (url) => {
+    // The extension's own files (translation catalogs) come off disk and are
+    // not network traffic, so they stay out of log.fetched.
+    if (String(url).startsWith(`${EXT}/`)) {
+      const file = path.join(EXT_ROOT, String(url).slice(EXT.length + 1));
+      const body = fs.readFileSync(file, "utf8");
+      return { json: async () => JSON.parse(body), text: async () => body };
+    }
     log.fetched.push(url);
     return {
       headers: { get: () => "text/html" },
@@ -225,7 +294,19 @@ export function install({ navMs = 5, sendMessageWorks = false } = {}) {
     onUpdated.fire(tabId, { status: "complete", url }, clone(t));
   }
 
-  return { chrome, tabs, ports, log, storage, tick, navigate, goTo };
+  return {
+    chrome,
+    tabs,
+    groups,
+    ports,
+    log,
+    storage,
+    tick,
+    navigate,
+    goTo,
+    restoreGroup,
+    addTab,
+  };
 }
 
 export function lazyUrl(url, title = "") {

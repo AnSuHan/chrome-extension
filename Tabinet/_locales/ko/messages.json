@@ -1,0 +1,383 @@
+{
+  "extDescription": {
+    "message": "탭을 묶고, 저장하고, 복원하세요 — 크롬을 위한 Safari 스타일 탭 그룹."
+  },
+  "extActionTitle": {
+    "message": "Tabinet — 탭 그룹 사이드바 열기"
+  },
+  "lazyLoading": {
+    "message": "불러오는 중…"
+  },
+  "lazySavedTab": {
+    "message": "저장된 탭"
+  },
+  "lazyClickToLoad": {
+    "message": "클릭하여 불러오기"
+  },
+  "newTab": {
+    "message": "새 탭"
+  },
+  "closeTab": {
+    "message": "탭 닫기"
+  },
+  "removeTab": {
+    "message": "탭 삭제"
+  },
+  "untitled": {
+    "message": "제목 없음"
+  },
+  "groupName": {
+    "message": "그룹 이름"
+  },
+  "newGroupName": {
+    "message": "새 그룹"
+  },
+  "deleteGroup": {
+    "message": "그룹 삭제"
+  },
+  "deleteGroupNamed": {
+    "message": "\"$1\" 그룹 삭제"
+  },
+  "deletedNamed": {
+    "message": "\"$1\" 삭제됨."
+  },
+  "movedTabTo": {
+    "message": "탭을 \"$1\"(으)로 옮겼습니다."
+  },
+  "alreadySaved": {
+    "message": "\"$1\"(이)가 이미 저장되어 있습니다."
+  },
+  "dragTabTitle": {
+    "message": "드래그해 순서 변경, 다른 그룹에 놓으면 이동"
+  },
+  "dismiss": {
+    "message": "닫기"
+  },
+  "backupGroupName": {
+    "message": "백업 (저장 안 된 탭)"
+  },
+  "defaultWindowGroupName": {
+    "message": "창 — $1"
+  },
+  "languageLabel": {
+    "message": "언어"
+  },
+  "languageAuto": {
+    "message": "자동 (크롬 언어)"
+  },
+  "aboutLink": {
+    "message": "버전 $1 · 패치 내역"
+  },
+  "aboutOpenTitle": {
+    "message": "버전 및 패치 내역"
+  },
+  "color_grey": {
+    "message": "회색"
+  },
+  "color_blue": {
+    "message": "파랑"
+  },
+  "color_red": {
+    "message": "빨강"
+  },
+  "color_yellow": {
+    "message": "노랑"
+  },
+  "color_green": {
+    "message": "초록"
+  },
+  "color_pink": {
+    "message": "분홍"
+  },
+  "color_purple": {
+    "message": "보라"
+  },
+  "color_cyan": {
+    "message": "청록"
+  },
+  "color_orange": {
+    "message": "주황"
+  },
+  "spNewGroupTitle": {
+    "message": "빈 그룹 만들기"
+  },
+  "spOpenEditorTitle": {
+    "message": "전체 편집기 열기"
+  },
+  "spDockHint": {
+    "message": "이 패널을 왼쪽으로 옮기려면 패널을 우클릭해 <b>“왼쪽에 표시”</b>를 선택하세요(또는 크롬 설정 → 모양 → 측면 패널)."
+  },
+  "spDismissHint": {
+    "message": "안내 닫기"
+  },
+  "spViewing": {
+    "message": "보는 중"
+  },
+  "spOpenTabs": {
+    "message": "열린 탭"
+  },
+  "spSavedGroups": {
+    "message": "저장된 그룹"
+  },
+  "spSaveWindow": {
+    "message": "창 저장"
+  },
+  "spSaveGroup": {
+    "message": "그룹 저장"
+  },
+  "spSaveGroupTitle": {
+    "message": "현재 탭이 속한 탭 그룹을 저장"
+  },
+  "spEmptyTitle": {
+    "message": "저장된 그룹이 없습니다"
+  },
+  "spEmptySub": {
+    "message": "현재 창이나 탭 그룹을 저장해 시작하세요."
+  },
+  "spDuplicateTab": {
+    "message": "탭 복제"
+  },
+  "spActiveBadgeTitle": {
+    "message": "이 탭들은 저장된 그룹 \"$1\"에 속합니다"
+  },
+  "spNoOpenTabs": {
+    "message": "열린 탭이 없습니다."
+  },
+  "spCantAddPage": {
+    "message": "이 페이지는 추가할 수 없습니다."
+  },
+  "spAddedCurrentTab": {
+    "message": "현재 탭을 추가했습니다."
+  },
+  "spRenamedTo": {
+    "message": "\"$1\"(으)로 이름을 바꿨습니다."
+  },
+  "spChangeColor": {
+    "message": "색 변경"
+  },
+  "spRenameGroup": {
+    "message": "그룹 이름 변경"
+  },
+  "spReopen": {
+    "message": "다시 열기"
+  },
+  "spOpenAll": {
+    "message": "모두 열기"
+  },
+  "spSwitchingTo": {
+    "message": "\"$1\"(으)로 전환 중…"
+  },
+  "spNoTabsYet": {
+    "message": "아직 탭이 없습니다."
+  },
+  "spAddCurrentTab": {
+    "message": "+ 현재 탭 추가"
+  },
+  "spSavedWindow": {
+    "message": "이 창을 저장했습니다."
+  },
+  "spNothingToSave": {
+    "message": "이 창에는 저장할 탭이 없습니다."
+  },
+  "spSavedGroup": {
+    "message": "\"$1\" 그룹을 저장했습니다."
+  },
+  "spNotInGroup": {
+    "message": "현재 탭이 그룹에 속해 있지 않습니다."
+  },
+  "spCreatedGroup": {
+    "message": "새 그룹을 만들었습니다."
+  },
+  "mgPageTitle": {
+    "message": "Tabinet — 그룹 관리"
+  },
+  "mgNewGroup": {
+    "message": "+ 새 그룹"
+  },
+  "mgGroupListLabel": {
+    "message": "탭 그룹"
+  },
+  "mgSync": {
+    "message": "기기 간 동기화"
+  },
+  "mgSyncTitle": {
+    "message": "그룹을 Google 계정에 동기화해 로그인한 모든 기기에서 보이게 합니다(저장 용량이 작음 — README 참고)."
+  },
+  "mgKeepLive": {
+    "message": "워크스페이스를 백그라운드에서 유지"
+  },
+  "mgKeepLiveTitle": {
+    "message": "켬: 떠난 워크스페이스가 크롬 탭 그룹으로 계속 살아 있어 되돌아올 때 즉시 전환됩니다 — 대신 크롬이 살아 있는 탭 그룹을 북마크바에 표시합니다. 끔: Tabinet 이 탭 그룹을 만들지 않아 북마크바에 아무것도 남지 않고, 되돌아올 때 (미리 데워진 상태로) 다시 열립니다. 워크스페이스별로 따로 설정할 수 있습니다."
+  },
+  "mgPreload": {
+    "message": "워크스페이스를 열 때 탭 미리 로딩"
+  },
+  "mgPreloadTitle": {
+    "message": "켬: 워크스페이스를 열면 탭을 몇 개씩 백그라운드에서 로딩해, 탭을 누르면 기다림 없이 이미 로딩된 페이지가 보입니다. 끔: 탭은 누를 때까지 로딩되지 않고(메모리 절약) 네트워크 예열만 합니다."
+  },
+  "mgAutoSaveChanges": {
+    "message": "탭 이동 자동 저장"
+  },
+  "mgAutoSaveChangesTitle": {
+    "message": "켬: 활성 워크스페이스의 탭이 다른 페이지로 이동하면 저장본도 따라가, 다시 열 때 마지막 위치에서 열립니다. 끔: 저장된 탭은 저장 당시 URL 을 유지합니다."
+  },
+  "mgAutoSaveCount": {
+    "message": "탭 추가·닫기 자동 저장"
+  },
+  "mgAutoSaveCountTitle": {
+    "message": "켬: 활성 워크스페이스에서 탭을 열거나 닫으면 저장본에도 추가/삭제됩니다. 끔: 저장본은 저장 당시 탭 개수를 유지합니다 — 위 옵션이 켜져 있으면 이동은 계속 저장됩니다."
+  },
+  "mgBookmarksHint": {
+    "message": "크롬 북마크바의 탭 그룹 줄은 완전히 숨길 수 있습니다: 북마크바를 우클릭해 <b>탭 그룹 표시</b>를 해제하세요."
+  },
+  "mgImportModeTitle": {
+    "message": "JSON 불러오기 적용 방식"
+  },
+  "mgMerge": {
+    "message": "병합"
+  },
+  "mgReplaceAll": {
+    "message": "전체 교체"
+  },
+  "mgLoad": {
+    "message": "불러오기"
+  },
+  "mgSave": {
+    "message": "저장"
+  },
+  "mgDragGroupTitle": {
+    "message": "드래그해 순서 변경"
+  },
+  "mgSidebarEmpty": {
+    "message": "그룹이 없습니다. 위에서 만들어 보세요."
+  },
+  "mgTitlePlaceholder": {
+    "message": "제목"
+  },
+  "mgOpenInNewTab": {
+    "message": "새 탭에서 열기"
+  },
+  "mgNoGroupsTitle": {
+    "message": "그룹이 없습니다"
+  },
+  "mgNoGroupsSub": {
+    "message": "왼쪽에서 그룹을 만들고 탭을 추가해 보세요."
+  },
+  "mgSelectTitle": {
+    "message": "그룹을 선택하세요"
+  },
+  "mgSelectSub": {
+    "message": "왼쪽에서 그룹을 골라 탭을 보고 편집하세요."
+  },
+  "mgGroupColor": {
+    "message": "그룹 색"
+  },
+  "mgKeepSelectTitle": {
+    "message": "유지: 전환해 나가도 이 워크스페이스가 크롬 탭 그룹으로 계속 살아 있습니다(즉시 복귀, 대신 북마크바에 표시). 전환 시 닫기: 탭을 저장하고 닫아 아무것도 남기지 않습니다."
+  },
+  "mgKeepDefault": {
+    "message": "기본값 ($1)"
+  },
+  "mgLiveShort": {
+    "message": "유지"
+  },
+  "mgCloseShort": {
+    "message": "전환 시 닫기"
+  },
+  "mgKeepOn": {
+    "message": "유지"
+  },
+  "mgKeepOff": {
+    "message": "전환 시 닫기"
+  },
+  "mgRestore": {
+    "message": "복원"
+  },
+  "mgRestoring": {
+    "message": "\"$1\" 복원 중…"
+  },
+  "mgDelete": {
+    "message": "삭제"
+  },
+  "mgTabsEmpty": {
+    "message": "이 그룹에는 아직 탭이 없습니다. 아래에서 추가하세요."
+  },
+  "mgAddTab": {
+    "message": "+ 탭 추가"
+  },
+  "mgTip": {
+    "message": "팁: ⋮⋮ 를 드래그해 탭 순서를 바꾸거나, 왼쪽 그룹 위에 놓아 그 그룹으로 옮길 수 있습니다."
+  },
+  "mgToastPreloadOn": {
+    "message": "워크스페이스를 열면 탭을 백그라운드에서 로딩합니다 — 클릭 즉시 표시됩니다."
+  },
+  "mgToastPreloadOff": {
+    "message": "탭은 클릭할 때만 로딩합니다 — 메모리는 가볍지만 첫 클릭이 느립니다."
+  },
+  "mgToastChangesOn": {
+    "message": "저장된 워크스페이스가 탭 이동을 따라갑니다."
+  },
+  "mgToastChangesOff": {
+    "message": "저장된 탭은 저장 당시 URL 을 유지합니다."
+  },
+  "mgToastCountOn": {
+    "message": "열고 닫은 탭이 워크스페이스에 저장됩니다."
+  },
+  "mgToastCountOff": {
+    "message": "저장된 워크스페이스는 탭 개수를 유지합니다; 탭을 열고 닫아도 바뀌지 않습니다."
+  },
+  "mgToastKeepOn": {
+    "message": "워크스페이스가 백그라운드에서 유지됩니다 — 크롬이 북마크바에 표시합니다."
+  },
+  "mgToastKeepOff": {
+    "message": "전환하면 워크스페이스를 닫습니다 — 북마크바에 아무것도 남지 않습니다."
+  },
+  "mgToastSyncOn": {
+    "message": "동기화 켜짐 — 그룹이 Google 계정에 저장됩니다."
+  },
+  "mgToastSyncOff": {
+    "message": "동기화 꺼짐 — 그룹이 이 기기에만 저장됩니다."
+  },
+  "mgToastSyncFail": {
+    "message": "동기화를 켜지 못했습니다: 동기화 저장소 용량(약 100KB) 초과. 로컬로 유지합니다."
+  },
+  "mgToastAreaFail": {
+    "message": "저장소를 전환하지 못했습니다. 이전 설정을 유지합니다."
+  },
+  "mgNothingToExport": {
+    "message": "저장할 그룹이 없습니다."
+  },
+  "mgReplaced": {
+    "message": "$1개 그룹으로 교체했습니다."
+  },
+  "mgMerged": {
+    "message": "$1개 그룹을 병합했습니다."
+  },
+  "mgLoadFailed": {
+    "message": "불러오기 실패: 올바른 Tabinet JSON 파일이 아닙니다."
+  },
+  "aboutPageTitle": {
+    "message": "Tabinet — 버전 및 패치 내역"
+  },
+  "aboutInstalled": {
+    "message": "설치된 버전"
+  },
+  "aboutTagline": {
+    "message": "탭을 묶고, 저장하고, 복원하세요."
+  },
+  "aboutHistory": {
+    "message": "패치 내역"
+  },
+  "aboutCurrent": {
+    "message": "현재 버전"
+  },
+  "aboutType_new": {
+    "message": "신규"
+  },
+  "aboutType_improved": {
+    "message": "개선"
+  },
+  "aboutType_fixed": {
+    "message": "수정"
+  }
+}

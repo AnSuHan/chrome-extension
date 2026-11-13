@@ -12,6 +12,13 @@
  */
 
 import {
+  SUPPORTED_LANGUAGES,
+  applyI18n,
+  initI18n,
+  reloadOnLanguageChange,
+  t,
+} from "../lib/i18n.js";
+import {
   addEmptyGroup,
   getGroups,
   getSettings,
@@ -82,7 +89,7 @@ function buildGroupItem(group) {
   const handle = document.createElement("span");
   handle.className = "g-handle";
   handle.textContent = "⠿";
-  handle.title = "Drag to reorder";
+  handle.title = t("mgDragGroupTitle");
   handle.addEventListener("mousedown", () => (li.draggable = true));
   handle.addEventListener("click", (e) => e.stopPropagation());
   li.addEventListener("dragend", () => (li.draggable = false));
@@ -103,7 +110,7 @@ function buildGroupItem(group) {
   del.className = "g-del";
   del.type = "button";
   del.textContent = "×";
-  del.title = "Delete group";
+  del.title = t("deleteGroup");
   del.addEventListener("click", async (e) => {
     e.stopPropagation();
     await removeGroup(group.id);
@@ -123,7 +130,7 @@ function renderSidebar() {
   if (state.length === 0) {
     const p = document.createElement("li");
     p.className = "sidebar-empty";
-    p.textContent = "No groups yet. Create one above.";
+    p.textContent = t("mgSidebarEmpty");
     listEl.append(p);
     return;
   }
@@ -142,7 +149,7 @@ function buildTabRow(group, tab, index) {
   const handle = document.createElement("span");
   handle.className = "tab-drag";
   handle.textContent = "⋮⋮";
-  handle.title = "Drag to reorder, or onto a group to move";
+  handle.title = t("dragTabTitle");
   handle.addEventListener("mousedown", () => (li.draggable = true));
   li.addEventListener("dragend", () => (li.draggable = false));
 
@@ -155,7 +162,7 @@ function buildTabRow(group, tab, index) {
 
   const title = document.createElement("input");
   title.className = "tab-title";
-  title.placeholder = "Title";
+  title.placeholder = t("mgTitlePlaceholder");
   title.value = tab.title;
   title.addEventListener("change", () => {
     tab.title = title.value;
@@ -177,7 +184,7 @@ function buildTabRow(group, tab, index) {
   const open = document.createElement("a");
   open.className = "tab-open";
   open.textContent = "↗";
-  open.title = "Open in a new tab";
+  open.title = t("mgOpenInNewTab");
   open.target = "_blank";
   open.rel = "noreferrer";
   open.href = tab.url || "#";
@@ -186,7 +193,7 @@ function buildTabRow(group, tab, index) {
   remove.className = "tab-remove";
   remove.type = "button";
   remove.textContent = "×";
-  remove.title = "Remove tab";
+  remove.title = t("removeTab");
   remove.addEventListener("click", async () => {
     group.tabs.splice(index, 1);
     await persistTabs(group);
@@ -204,12 +211,16 @@ function renderDetail() {
   if (!group) {
     const box = document.createElement("div");
     box.className = "detail-empty";
-    box.innerHTML =
+    const [icon, head, sub] =
       state.length === 0
-        ? `<div class="big">📁</div><div class="t">No groups yet</div>
-           <div>Create a group on the left to start adding tabs.</div>`
-        : `<div class="big">👈</div><div class="t">Select a group</div>
-           <div>Pick a group on the left to view and edit its tabs.</div>`;
+        ? ["📁", t("mgNoGroupsTitle"), t("mgNoGroupsSub")]
+        : ["👈", t("mgSelectTitle"), t("mgSelectSub")];
+    for (const [cls, text] of [["big", icon], ["t", head], ["", sub]]) {
+      const div = document.createElement("div");
+      if (cls) div.className = cls;
+      div.textContent = text;
+      box.append(div);
+    }
     detailEl.append(box);
     return;
   }
@@ -223,11 +234,11 @@ function renderDetail() {
 
   const color = document.createElement("select");
   color.className = "color-select";
-  color.title = "Group color";
+  color.title = t("mgGroupColor");
   for (const c of CHROME_COLORS) {
     const opt = document.createElement("option");
     opt.value = c;
-    opt.textContent = c;
+    opt.textContent = t(`color_${c}`);
     if (c === group.color) opt.selected = true;
     color.append(opt);
   }
@@ -240,7 +251,7 @@ function renderDetail() {
   const name = document.createElement("input");
   name.className = "name-input";
   name.value = group.name;
-  name.placeholder = "Group name";
+  name.placeholder = t("groupName");
   name.addEventListener("change", async () => {
     group.name = name.value.trim() || group.name;
     name.value = group.name;
@@ -253,16 +264,13 @@ function renderDetail() {
   // in the bookmarks bar. "Default" follows the global setting on the left.
   const keep = document.createElement("select");
   keep.className = "color-select keep-select";
-  keep.title =
-    "Live: this workspace keeps running as a Chrome tab group when you switch " +
-    "away (instant to come back to, but Chrome shows it in the bookmarks bar). " +
-    "Close on switch: its tabs are saved and closed, leaving nothing behind.";
+  keep.title = t("mgKeepSelectTitle");
   const current =
     typeof group.keepLoaded === "boolean" ? (group.keepLoaded ? "on" : "off") : "";
   for (const [value, label] of [
-    ["", `Default (${globalKeepLoaded ? "live" : "close on switch"})`],
-    ["on", "Keep live"],
-    ["off", "Close on switch"],
+    ["", t("mgKeepDefault", globalKeepLoaded ? t("mgLiveShort") : t("mgCloseShort"))],
+    ["on", t("mgKeepOn")],
+    ["off", t("mgKeepOff")],
   ]) {
     const opt = document.createElement("option");
     opt.value = value;
@@ -283,17 +291,17 @@ function renderDetail() {
   const restore = document.createElement("button");
   restore.className = "icon-btn primary";
   restore.type = "button";
-  restore.textContent = "Restore";
+  restore.textContent = t("mgRestore");
   restore.disabled = group.tabs.length === 0;
   restore.addEventListener("click", () => {
     chrome.runtime.sendMessage({ type: "RESTORE_GROUP", id: group.id });
-    toast(`Restoring "${group.name}"…`);
+    toast(t("mgRestoring", group.name));
   });
 
   const del = document.createElement("button");
   del.className = "icon-btn danger";
   del.type = "button";
-  del.textContent = "Delete";
+  del.textContent = t("mgDelete");
   del.addEventListener("click", async () => {
     await removeGroup(group.id);
     state = state.filter((g) => g.id !== group.id);
@@ -309,7 +317,7 @@ function renderDetail() {
   if (group.tabs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "tabs-empty";
-    empty.textContent = "No tabs in this group yet. Add one below.";
+    empty.textContent = t("mgTabsEmpty");
     inner.append(empty);
   } else {
     const ul = document.createElement("ul");
@@ -321,7 +329,7 @@ function renderDetail() {
   const addTab = document.createElement("button");
   addTab.className = "add-tab";
   addTab.type = "button";
-  addTab.textContent = "+ Add tab";
+  addTab.textContent = t("mgAddTab");
   addTab.addEventListener("click", async () => {
     group.tabs.push({ title: "", url: "" });
     await persistTabs(group);
@@ -334,8 +342,7 @@ function renderDetail() {
 
   const hint = document.createElement("p");
   hint.className = "hint";
-  hint.textContent =
-    "Tip: drag ⋮⋮ to reorder tabs, or drag a tab onto a group on the left to move it there.";
+  hint.textContent = t("mgTip");
   inner.append(hint);
 
   detailEl.append(inner);
@@ -377,7 +384,7 @@ async function moveTabToGroup(fromId, index, toId) {
   to.tabs.push(tab);
   await persistTabs(from);
   await persistTabs(to);
-  toast(`Moved tab to "${to.name}".`);
+  toast(t("movedTabTo", to.name));
   render();
 }
 
@@ -515,7 +522,7 @@ function cleanupDrag() {
  * ================================================================== */
 
 document.getElementById("new-group-btn").addEventListener("click", async () => {
-  const g = await addEmptyGroup({ name: "New group" });
+  const g = await addEmptyGroup({ name: t("newGroupName") });
   await reload();
   selectGroup(g.id);
   detailEl.querySelector(".name-input")?.focus();
@@ -542,8 +549,8 @@ preloadToggle.addEventListener("change", async () => {
   await updateSettings({ preloadTabs: preloadToggle.checked });
   toast(
     preloadToggle.checked
-      ? "Tabs load in the background when a workspace opens — clicking one is instant."
-      : "Tabs load only when you click them — lighter on memory, slower on first click.",
+      ? t("mgToastPreloadOn")
+      : t("mgToastPreloadOff"),
   );
 });
 
@@ -551,8 +558,8 @@ autoSaveChangesToggle.addEventListener("change", async () => {
   await updateSettings({ autoSaveChanges: autoSaveChangesToggle.checked });
   toast(
     autoSaveChangesToggle.checked
-      ? "Saved workspaces follow their tabs as you browse."
-      : "Saved tabs keep the URL they were saved with.",
+      ? t("mgToastChangesOn")
+      : t("mgToastChangesOff"),
   );
 });
 
@@ -560,8 +567,8 @@ autoSaveCountToggle.addEventListener("change", async () => {
   await updateSettings({ autoSaveCount: autoSaveCountToggle.checked });
   toast(
     autoSaveCountToggle.checked
-      ? "Tabs you open or close are saved to the workspace."
-      : "The saved workspace keeps its tab count; opening or closing tabs won't change it.",
+      ? t("mgToastCountOn")
+      : t("mgToastCountOff"),
   );
 });
 
@@ -571,8 +578,8 @@ keepLoadedToggle.addEventListener("change", async () => {
   renderDetail(); // the per-group selector shows what "Default" resolves to
   toast(
     keepLoadedToggle.checked
-      ? "Workspaces stay live in the background — Chrome shows them in the bookmarks bar."
-      : "Workspaces close when you switch away — nothing left in the bookmarks bar.",
+      ? t("mgToastKeepOn")
+      : t("mgToastKeepOff"),
   );
 });
 
@@ -584,15 +591,15 @@ syncToggle.addEventListener("change", async () => {
     await reload();
     toast(
       target === "sync"
-        ? "Sync enabled — groups now live in your Google account."
-        : "Sync disabled — groups now stored on this device only.",
+        ? t("mgToastSyncOn")
+        : t("mgToastSyncOff"),
     );
   } catch (err) {
     syncToggle.checked = target !== "sync";
     toast(
       target === "sync"
-        ? "Couldn't enable sync: too much data for sync storage (~100KB limit). Kept local."
-        : "Couldn't switch storage. Kept previous setting.",
+        ? t("mgToastSyncFail")
+        : t("mgToastAreaFail"),
     );
     console.error("Tabinet setArea failed:", err);
   } finally {
@@ -602,7 +609,7 @@ syncToggle.addEventListener("change", async () => {
 
 document.getElementById("export-btn").addEventListener("click", async () => {
   if (state.length === 0) {
-    toast("Nothing to save.");
+    toast(t("mgNothingToExport"));
     return;
   }
   const blob = new Blob([JSON.stringify(state, null, 2)], {
@@ -635,13 +642,51 @@ importFile.addEventListener("change", async () => {
     await reload();
     toast(
       mode === "replace"
-        ? `Replaced with ${count} group(s).`
-        : `Merged in ${count} group(s).`,
+        ? t("mgReplaced", count)
+        : t("mgMerged", count),
     );
   } catch {
-    toast("Load failed: not a valid Tabinet JSON file.");
+    toast(t("mgLoadFailed"));
   }
 });
 
-refreshSettingsToggles();
-reload();
+/* ================================================================== *
+ * Language + version
+ * ================================================================== */
+
+const languageSelect = document.getElementById("language-select");
+
+async function initLanguagePicker() {
+  const { language = "auto" } = await getSettings();
+  for (const [code, label] of [
+    ["auto", t("languageAuto")],
+    ...SUPPORTED_LANGUAGES.map((l) => [l.code, l.label]),
+  ]) {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = label;
+    if (code === language) opt.selected = true;
+    languageSelect.append(opt);
+  }
+  // Saving the setting is enough: every open Tabinet page (this one included)
+  // reloads itself in the new language — see reloadOnLanguageChange.
+  languageSelect.addEventListener("change", () =>
+    updateSettings({ language: languageSelect.value }),
+  );
+}
+
+async function init() {
+  await initI18n();
+  document.title = t("mgPageTitle");
+  applyI18n();
+  reloadOnLanguageChange();
+  document.getElementById("about-link").textContent = t(
+    "aboutLink",
+    chrome.runtime.getManifest().version,
+  );
+  await initLanguagePicker();
+  refreshSettingsToggles();
+  reload();
+}
+
+init();
