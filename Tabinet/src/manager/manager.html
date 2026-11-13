@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tabinet — Manage groups</title>
+    <title>Tabinet</title>
     <link rel="stylesheet" href="manager.css" />
   </head>
   <body>
@@ -15,64 +15,49 @@
             <img class="brand-icon" src="../../icons/icon48.png" alt="" />
             <h1 class="title">Tabinet</h1>
           </div>
-          <button id="new-group-btn" class="btn primary block" type="button">
-            + New group
-          </button>
+          <button id="new-group-btn" class="btn primary block" type="button" data-i18n="mgNewGroup"></button>
         </div>
 
-        <ul id="group-list" class="group-list" aria-label="Tab groups">
+        <ul id="group-list" class="group-list" data-i18n-aria-label="mgGroupListLabel">
           <!-- rendered by manager.js -->
         </ul>
 
         <div class="sidebar-foot">
-          <label
-            class="sync-toggle"
-            title="Sync groups to your Google account so they appear on every device you're signed into (small storage limit — see README)."
-          >
+          <label class="sync-toggle" data-i18n-title="mgSyncTitle">
             <input id="sync-toggle" type="checkbox" />
-            Sync across devices
+            <span data-i18n="mgSync"></span>
           </label>
-          <label
-            class="sync-toggle"
-            title="On: the workspace you leave keeps running as a Chrome tab group, so switching back is instant — but Chrome lists every live tab group in the bookmarks bar. Off: Tabinet never creates tab groups, so nothing appears in the bookmarks bar; workspaces reopen (pre-warmed) when you switch back. Individual workspaces can override this."
-          >
+          <label class="sync-toggle" data-i18n-title="mgKeepLiveTitle">
             <input id="keep-loaded-toggle" type="checkbox" />
-            Keep workspaces live in the background
+            <span data-i18n="mgKeepLive"></span>
           </label>
-          <label
-            class="sync-toggle"
-            title="On: when a workspace opens, Tabinet loads its tabs in the background a few at a time, so clicking a tab shows an already-loaded page instead of waiting for it. Off: tabs stay unloaded until you click them (lighter on memory), and are only network-warmed."
-          >
+          <label class="sync-toggle" data-i18n-title="mgPreloadTitle">
             <input id="preload-toggle" type="checkbox" />
-            Pre-load tabs when a workspace opens
+            <span data-i18n="mgPreload"></span>
           </label>
-          <label
-            class="sync-toggle"
-            title="On: when a tab in the active workspace navigates, the saved workspace follows it, so it reopens where you left off. Off: each saved tab keeps the URL it was saved with."
-          >
+          <label class="sync-toggle" data-i18n-title="mgAutoSaveChangesTitle">
             <input id="autosave-changes-toggle" type="checkbox" />
-            Auto-save where tabs navigate
+            <span data-i18n="mgAutoSaveChanges"></span>
           </label>
-          <label
-            class="sync-toggle"
-            title="On: tabs you open or close in the active workspace are added to / removed from the saved workspace. Off: the saved workspace keeps the number of tabs it was saved with — navigation is still saved if the option above is on."
-          >
+          <label class="sync-toggle" data-i18n-title="mgAutoSaveCountTitle">
             <input id="autosave-count-toggle" type="checkbox" />
-            Auto-save tabs you add or close
+            <span data-i18n="mgAutoSaveCount"></span>
           </label>
-          <p class="foot-hint">
-            Chrome's own bookmarks bar row can be hidden entirely: right-click
-            the bookmarks bar and uncheck <b>Show tab groups</b>.
-          </p>
+          <p class="foot-hint" data-i18n-html="mgBookmarksHint"></p>
           <div class="io-row">
-            <select id="import-mode" title="How Load JSON applies the file">
-              <option value="merge">Merge</option>
-              <option value="replace">Replace all</option>
+            <select id="import-mode" data-i18n-title="mgImportModeTitle">
+              <option value="merge" data-i18n="mgMerge"></option>
+              <option value="replace" data-i18n="mgReplaceAll"></option>
             </select>
-            <button id="import-btn" class="btn small" type="button">Load</button>
-            <button id="export-btn" class="btn small" type="button">Save</button>
+            <button id="import-btn" class="btn small" type="button" data-i18n="mgLoad"></button>
+            <button id="export-btn" class="btn small" type="button" data-i18n="mgSave"></button>
             <input id="import-file" type="file" accept="application/json" hidden />
           </div>
+          <div class="io-row">
+            <label class="lang-label" for="language-select" data-i18n="languageLabel"></label>
+            <select id="language-select"></select>
+          </div>
+          <a id="about-link" class="about-link" href="../about/about.html" target="_blank"></a>
         </div>
       </aside>
 

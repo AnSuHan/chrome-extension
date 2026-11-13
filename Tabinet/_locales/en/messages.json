@@ -1,0 +1,383 @@
+{
+  "extDescription": {
+    "message": "Group, save, and restore your tabs — Safari-style tab groups for Chrome."
+  },
+  "extActionTitle": {
+    "message": "Tabinet — open the tab-groups sidebar"
+  },
+  "lazyLoading": {
+    "message": "Loading…"
+  },
+  "lazySavedTab": {
+    "message": "Saved tab"
+  },
+  "lazyClickToLoad": {
+    "message": "Click to load"
+  },
+  "newTab": {
+    "message": "New tab"
+  },
+  "closeTab": {
+    "message": "Close tab"
+  },
+  "removeTab": {
+    "message": "Remove tab"
+  },
+  "untitled": {
+    "message": "Untitled"
+  },
+  "groupName": {
+    "message": "Group name"
+  },
+  "newGroupName": {
+    "message": "New group"
+  },
+  "deleteGroup": {
+    "message": "Delete group"
+  },
+  "deleteGroupNamed": {
+    "message": "Delete group \"$1\""
+  },
+  "deletedNamed": {
+    "message": "Deleted \"$1\"."
+  },
+  "movedTabTo": {
+    "message": "Moved tab to \"$1\"."
+  },
+  "alreadySaved": {
+    "message": "\"$1\" is already saved."
+  },
+  "dragTabTitle": {
+    "message": "Drag to reorder, or onto a group to move"
+  },
+  "dismiss": {
+    "message": "Dismiss"
+  },
+  "backupGroupName": {
+    "message": "Backup (unsaved tabs)"
+  },
+  "defaultWindowGroupName": {
+    "message": "Window — $1"
+  },
+  "languageLabel": {
+    "message": "Language"
+  },
+  "languageAuto": {
+    "message": "Auto (Chrome language)"
+  },
+  "aboutLink": {
+    "message": "Version $1 · Release notes"
+  },
+  "aboutOpenTitle": {
+    "message": "Version & release notes"
+  },
+  "color_grey": {
+    "message": "Grey"
+  },
+  "color_blue": {
+    "message": "Blue"
+  },
+  "color_red": {
+    "message": "Red"
+  },
+  "color_yellow": {
+    "message": "Yellow"
+  },
+  "color_green": {
+    "message": "Green"
+  },
+  "color_pink": {
+    "message": "Pink"
+  },
+  "color_purple": {
+    "message": "Purple"
+  },
+  "color_cyan": {
+    "message": "Cyan"
+  },
+  "color_orange": {
+    "message": "Orange"
+  },
+  "spNewGroupTitle": {
+    "message": "New empty group"
+  },
+  "spOpenEditorTitle": {
+    "message": "Open full editor"
+  },
+  "spDockHint": {
+    "message": "To move this panel to the left, right-click the panel and choose <b>“Show on left”</b> (or Chrome Settings → Appearance → Side panel)."
+  },
+  "spDismissHint": {
+    "message": "Dismiss hint"
+  },
+  "spViewing": {
+    "message": "Viewing"
+  },
+  "spOpenTabs": {
+    "message": "Open tabs"
+  },
+  "spSavedGroups": {
+    "message": "Saved groups"
+  },
+  "spSaveWindow": {
+    "message": "Save window"
+  },
+  "spSaveGroup": {
+    "message": "Save group"
+  },
+  "spSaveGroupTitle": {
+    "message": "Save the tab group the active tab belongs to"
+  },
+  "spEmptyTitle": {
+    "message": "No saved groups yet"
+  },
+  "spEmptySub": {
+    "message": "Save the current window or tab group to get started."
+  },
+  "spDuplicateTab": {
+    "message": "Duplicate tab"
+  },
+  "spActiveBadgeTitle": {
+    "message": "These tabs belong to the saved group \"$1\""
+  },
+  "spNoOpenTabs": {
+    "message": "No open tabs found."
+  },
+  "spCantAddPage": {
+    "message": "Can't add this page."
+  },
+  "spAddedCurrentTab": {
+    "message": "Added current tab."
+  },
+  "spRenamedTo": {
+    "message": "Renamed to \"$1\"."
+  },
+  "spChangeColor": {
+    "message": "Change color"
+  },
+  "spRenameGroup": {
+    "message": "Rename group"
+  },
+  "spReopen": {
+    "message": "Reopen"
+  },
+  "spOpenAll": {
+    "message": "Open all"
+  },
+  "spSwitchingTo": {
+    "message": "Switching to \"$1\"…"
+  },
+  "spNoTabsYet": {
+    "message": "No tabs yet."
+  },
+  "spAddCurrentTab": {
+    "message": "+ Add current tab"
+  },
+  "spSavedWindow": {
+    "message": "Saved this window."
+  },
+  "spNothingToSave": {
+    "message": "Nothing to save in this window."
+  },
+  "spSavedGroup": {
+    "message": "Saved group \"$1\"."
+  },
+  "spNotInGroup": {
+    "message": "Active tab isn't in a group."
+  },
+  "spCreatedGroup": {
+    "message": "Created a new group."
+  },
+  "mgPageTitle": {
+    "message": "Tabinet — Manage groups"
+  },
+  "mgNewGroup": {
+    "message": "+ New group"
+  },
+  "mgGroupListLabel": {
+    "message": "Tab groups"
+  },
+  "mgSync": {
+    "message": "Sync across devices"
+  },
+  "mgSyncTitle": {
+    "message": "Sync groups to your Google account so they appear on every device you're signed into (small storage limit — see README)."
+  },
+  "mgKeepLive": {
+    "message": "Keep workspaces live in the background"
+  },
+  "mgKeepLiveTitle": {
+    "message": "On: the workspace you leave keeps running as a Chrome tab group, so switching back is instant — but Chrome lists every live tab group in the bookmarks bar. Off: Tabinet never creates tab groups, so nothing appears in the bookmarks bar; workspaces reopen (pre-warmed) when you switch back. Individual workspaces can override this."
+  },
+  "mgPreload": {
+    "message": "Pre-load tabs when a workspace opens"
+  },
+  "mgPreloadTitle": {
+    "message": "On: when a workspace opens, Tabinet loads its tabs in the background a few at a time, so clicking a tab shows an already-loaded page instead of waiting for it. Off: tabs stay unloaded until you click them (lighter on memory), and are only network-warmed."
+  },
+  "mgAutoSaveChanges": {
+    "message": "Auto-save where tabs navigate"
+  },
+  "mgAutoSaveChangesTitle": {
+    "message": "On: when a tab in the active workspace navigates, the saved workspace follows it, so it reopens where you left off. Off: each saved tab keeps the URL it was saved with."
+  },
+  "mgAutoSaveCount": {
+    "message": "Auto-save tabs you add or close"
+  },
+  "mgAutoSaveCountTitle": {
+    "message": "On: tabs you open or close in the active workspace are added to / removed from the saved workspace. Off: the saved workspace keeps the number of tabs it was saved with — navigation is still saved if the option above is on."
+  },
+  "mgBookmarksHint": {
+    "message": "Chrome's own bookmarks bar row can be hidden entirely: right-click the bookmarks bar and uncheck <b>Show tab groups</b>."
+  },
+  "mgImportModeTitle": {
+    "message": "How Load JSON applies the file"
+  },
+  "mgMerge": {
+    "message": "Merge"
+  },
+  "mgReplaceAll": {
+    "message": "Replace all"
+  },
+  "mgLoad": {
+    "message": "Load"
+  },
+  "mgSave": {
+    "message": "Save"
+  },
+  "mgDragGroupTitle": {
+    "message": "Drag to reorder"
+  },
+  "mgSidebarEmpty": {
+    "message": "No groups yet. Create one above."
+  },
+  "mgTitlePlaceholder": {
+    "message": "Title"
+  },
+  "mgOpenInNewTab": {
+    "message": "Open in a new tab"
+  },
+  "mgNoGroupsTitle": {
+    "message": "No groups yet"
+  },
+  "mgNoGroupsSub": {
+    "message": "Create a group on the left to start adding tabs."
+  },
+  "mgSelectTitle": {
+    "message": "Select a group"
+  },
+  "mgSelectSub": {
+    "message": "Pick a group on the left to view and edit its tabs."
+  },
+  "mgGroupColor": {
+    "message": "Group color"
+  },
+  "mgKeepSelectTitle": {
+    "message": "Live: this workspace keeps running as a Chrome tab group when you switch away (instant to come back to, but Chrome shows it in the bookmarks bar). Close on switch: its tabs are saved and closed, leaving nothing behind."
+  },
+  "mgKeepDefault": {
+    "message": "Default ($1)"
+  },
+  "mgLiveShort": {
+    "message": "live"
+  },
+  "mgCloseShort": {
+    "message": "close on switch"
+  },
+  "mgKeepOn": {
+    "message": "Keep live"
+  },
+  "mgKeepOff": {
+    "message": "Close on switch"
+  },
+  "mgRestore": {
+    "message": "Restore"
+  },
+  "mgRestoring": {
+    "message": "Restoring \"$1\"…"
+  },
+  "mgDelete": {
+    "message": "Delete"
+  },
+  "mgTabsEmpty": {
+    "message": "No tabs in this group yet. Add one below."
+  },
+  "mgAddTab": {
+    "message": "+ Add tab"
+  },
+  "mgTip": {
+    "message": "Tip: drag ⋮⋮ to reorder tabs, or drag a tab onto a group on the left to move it there."
+  },
+  "mgToastPreloadOn": {
+    "message": "Tabs load in the background when a workspace opens — clicking one is instant."
+  },
+  "mgToastPreloadOff": {
+    "message": "Tabs load only when you click them — lighter on memory, slower on first click."
+  },
+  "mgToastChangesOn": {
+    "message": "Saved workspaces follow their tabs as you browse."
+  },
+  "mgToastChangesOff": {
+    "message": "Saved tabs keep the URL they were saved with."
+  },
+  "mgToastCountOn": {
+    "message": "Tabs you open or close are saved to the workspace."
+  },
+  "mgToastCountOff": {
+    "message": "The saved workspace keeps its tab count; opening or closing tabs won't change it."
+  },
+  "mgToastKeepOn": {
+    "message": "Workspaces stay live in the background — Chrome shows them in the bookmarks bar."
+  },
+  "mgToastKeepOff": {
+    "message": "Workspaces close when you switch away — nothing left in the bookmarks bar."
+  },
+  "mgToastSyncOn": {
+    "message": "Sync enabled — groups now live in your Google account."
+  },
+  "mgToastSyncOff": {
+    "message": "Sync disabled — groups now stored on this device only."
+  },
+  "mgToastSyncFail": {
+    "message": "Couldn't enable sync: too much data for sync storage (~100KB limit). Kept local."
+  },
+  "mgToastAreaFail": {
+    "message": "Couldn't switch storage. Kept previous setting."
+  },
+  "mgNothingToExport": {
+    "message": "Nothing to save."
+  },
+  "mgReplaced": {
+    "message": "Replaced with $1 group(s)."
+  },
+  "mgMerged": {
+    "message": "Merged in $1 group(s)."
+  },
+  "mgLoadFailed": {
+    "message": "Load failed: not a valid Tabinet JSON file."
+  },
+  "aboutPageTitle": {
+    "message": "Tabinet — Version & release notes"
+  },
+  "aboutInstalled": {
+    "message": "Installed version"
+  },
+  "aboutTagline": {
+    "message": "Group, save, and restore your tabs."
+  },
+  "aboutHistory": {
+    "message": "Release notes"
+  },
+  "aboutCurrent": {
+    "message": "Installed"
+  },
+  "aboutType_new": {
+    "message": "New"
+  },
+  "aboutType_improved": {
+    "message": "Improved"
+  },
+  "aboutType_fixed": {
+    "message": "Fixed"
+  }
+}

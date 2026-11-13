@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tabinet</title>
+    <link rel="stylesheet" href="about.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <img class="hero-icon" src="../../icons/icon128.png" alt="" />
+        <div>
+          <h1 class="hero-name">Tabinet</h1>
+          <p class="hero-version">
+            <span data-i18n="aboutInstalled"></span>
+            <b id="version"></b>
+          </p>
+          <p class="hero-tagline" data-i18n="aboutTagline"></p>
+        </div>
+      </header>
+
+      <section>
+        <h2 class="section-title" data-i18n="aboutHistory"></h2>
+        <ol id="releases" class="releases">
+          <!-- rendered by about.js -->
+        </ol>
+      </section>
+    </main>
+
+    <script type="module" src="about.js"></script>
+  </body>
+</html>

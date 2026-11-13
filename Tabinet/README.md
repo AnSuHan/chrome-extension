@@ -3,7 +3,7 @@
 **Tab + Cabinet** — group, save, and restore your tabs. A Safari-style tab-group
 manager for Chrome (Manifest V3).
 
-Current version: **1.0.0** — see [CHANGELOG.md](CHANGELOG.md) for the release
+Current version: **1.2.0** — see [CHANGELOG.md](CHANGELOG.md) for the release
 history and known limitations.
 
 ## What it does
@@ -87,6 +87,25 @@ Options):
   groups**. Chips left over from earlier sessions stay until you right-click
   and delete them once.
 
+- **Language** — English, 한국어 or 日本語. *Auto* (the default) follows
+  Chrome's language; changing it redraws every open Tabinet page at once.
+- **Version & release notes** — the version link at the bottom of the editor's
+  sidebar (or **ⓘ** in the side panel) opens a page with the installed version
+  and the full release history.
+
+**No pile-ups.** Tabinet works hard not to multiply groups:
+
+- Switching away from a window that has no saved workspace keeps its unsaved
+  tabs in **one** shared *Backup (unsaved tabs)* group — tabs already saved in
+  some group are skipped, and nothing is added twice.
+- **Save window** saves only the tabs you can see, and says *already saved*
+  instead of storing an identical copy.
+- After a browser restart Chrome restores each live workspace's tab group under
+  a new id. Tabinet re-attaches those groups to their saved workspaces by title
+  (and merges a duplicate copy back into one), so switching reuses them instead
+  of opening each workspace again. Groups whose title matches no saved
+  workspace are yours and are never touched.
+
 By default everything is stored locally via `chrome.storage.local`; nothing
 leaves the browser. JSON files are the explicit save/backup format.
 
@@ -111,11 +130,15 @@ Tabinet/
 ├── manifest.json              # MV3 manifest (side_panel, options_page, worker)
 ├── README.md
 ├── icons/                     # icon16/48/128.png
+├── _locales/                  # en / ko / ja message catalogs (UI + manifest)
 └── src/
     ├── background/
     │   └── service-worker.js  # opens the side panel; save/restore tab operations
+    ├── about/                 # version & release-notes page
     ├── lib/
-    │   └── storage.js         # sharded persistence (local/sync) + edit/reorder/import
+    │   ├── storage.js         # sharded persistence (local/sync) + edit/reorder/import
+    │   ├── i18n.js            # loads the chosen language's catalog; t() / applyI18n()
+    │   └── changelog.js       # release notes shown on the version page
     ├── sidepanel/
     │   ├── sidepanel.html     # docked sidebar (default surface)
     │   ├── sidepanel.css      # sidebar styles (light + dark)

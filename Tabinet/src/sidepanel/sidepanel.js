@@ -17,6 +17,7 @@
  * setting); tab capture/restore is delegated to the service worker.
  */
 
+import { applyI18n, initI18n, reloadOnLanguageChange, t } from "../lib/i18n.js";
 import {
   addEmptyGroup,
   getGroups,
@@ -47,6 +48,7 @@ const saveWindowBtn = document.getElementById("save-window-btn");
 const saveGroupBtn = document.getElementById("save-group-btn");
 const newGroupBtn = document.getElementById("new-group-btn");
 const editorBtn = document.getElementById("editor-btn");
+const aboutBtn = document.getElementById("about-btn");
 const openListEl = document.getElementById("open-list");
 const openCountEl = document.getElementById("open-count");
 const activeBadgeEl = document.getElementById("active-badge");
@@ -108,7 +110,8 @@ function renderActiveBadge() {
   const label = document.createElement("span");
   label.className = "active-badge-name";
   label.textContent = g.name;
-  activeBadgeEl.title = `These tabs belong to the saved group "${g.name}"`;
+  activeBadgeEl.title = t("spActiveBadgeTitle", g.name);
+  activeBadgeEl.dataset.label = t("spViewing");
   activeBadgeEl.append(dot, label);
 }
 
@@ -230,7 +233,7 @@ function buildOpenTab(tab) {
   meta.className = "otab-meta";
   const title = document.createElement("span");
   title.className = "otab-title";
-  title.textContent = tab.title || hostOf(url) || "New tab";
+  title.textContent = tab.title || hostOf(url) || t("newTab");
   const host = document.createElement("span");
   host.className = "otab-host";
   host.textContent = hostOf(url);
@@ -240,7 +243,7 @@ function buildOpenTab(tab) {
   close.className = "otab-close";
   close.type = "button";
   close.textContent = "×";
-  close.title = "Close tab";
+  close.title = t("closeTab");
   close.addEventListener("click", (e) => {
     e.stopPropagation();
     chrome.tabs.remove(tab.id);
@@ -280,7 +283,7 @@ async function renderOpenTabs() {
   if (!tabs.length) {
     const li = document.createElement("li");
     li.className = "otab-empty";
-    li.textContent = "No open tabs found.";
+    li.textContent = t("spNoOpenTabs");
     openListEl.append(li);
   } else {
     for (const tab of tabs) openListEl.append(buildOpenTab(tab));
@@ -445,7 +448,7 @@ async function addCurrentTab(groupId) {
     currentWindow: true,
   });
   if (!active || !/^https?:/.test(active.url ?? "")) {
-    toast("Can't add this page.");
+    toast(t("spCantAddPage"));
     return;
   }
   const g = byId(groupId);
@@ -453,7 +456,7 @@ async function addCurrentTab(groupId) {
   g.tabs.push({ title: active.title ?? "", url: active.url });
   await updateGroup(groupId, { tabs: g.tabs });
   expanded.add(groupId);
-  toast("Added current tab.");
+  toast(t("spAddedCurrentTab"));
   reload();
 }
 
@@ -486,7 +489,7 @@ function startRename(group, nameEl) {
   const input = document.createElement("input");
   input.className = "g-name-input";
   input.value = group.name;
-  input.setAttribute("aria-label", "Group name");
+  input.setAttribute("aria-label", t("groupName"));
   nameEl.textContent = "";
   nameEl.append(input);
   input.focus();
@@ -500,7 +503,7 @@ function startRename(group, nameEl) {
     if (save && next && next !== group.name) {
       group.name = next;
       await updateGroup(group.id, { name: next });
-      toast(`Renamed to "${next}".`);
+      toast(t("spRenamedTo", next));
     }
     reload();
   };
@@ -537,7 +540,7 @@ function openColorPicker(group, anchor) {
     sw.type = "button";
     sw.className = "swatch" + (c === group.color ? " current" : "");
     sw.style.background = COLOR_HEX[c];
-    sw.title = c;
+    sw.title = t(`color_${c}`);
     sw.addEventListener("click", async (e) => {
       e.stopPropagation();
       closeColorPicker();
@@ -579,7 +582,7 @@ async function moveTab(fromId, index, toId) {
   await updateGroup(fromId, { tabs: from.tabs });
   await updateGroup(toId, { tabs: to.tabs });
   expanded.add(toId);
-  toast(`Moved tab to "${to.name}".`);
+  toast(t("movedTabTo", to.name));
   reload();
 }
 
@@ -596,7 +599,7 @@ function buildTab(group, tab, index) {
   const handle = document.createElement("span");
   handle.className = "tab-drag";
   handle.textContent = "⋮⋮";
-  handle.title = "Drag to reorder, or onto a group to move";
+  handle.title = t("dragTabTitle");
   handle.addEventListener("mousedown", () => (li.draggable = true));
   li.addEventListener("dragend", () => (li.draggable = false));
 
@@ -612,7 +615,7 @@ function buildTab(group, tab, index) {
   meta.className = "tab-meta";
   const title = document.createElement("div");
   title.className = "tab-title";
-  title.textContent = tab.title || hostOf(tab.url) || "Untitled";
+  title.textContent = tab.title || hostOf(tab.url) || t("untitled");
   const host = document.createElement("div");
   host.className = "tab-host";
   host.textContent = hostOf(tab.url);
@@ -626,7 +629,7 @@ function buildTab(group, tab, index) {
   del.className = "tab-del";
   del.type = "button";
   del.textContent = "×";
-  del.title = "Remove tab";
+  del.title = t("removeTab");
   del.addEventListener("click", (e) => {
     e.stopPropagation();
     deleteTab(group.id, index);
@@ -661,7 +664,7 @@ function buildGroup(group) {
   dot.className = "g-dot";
   dot.style.background = COLOR_HEX[group.color] ?? COLOR_HEX.grey;
   dot.setAttribute("role", "button");
-  dot.title = "Change color";
+  dot.title = t("spChangeColor");
   dot.addEventListener("click", (e) => {
     e.stopPropagation();
     openColorPicker(group, dot);
@@ -687,7 +690,7 @@ function buildGroup(group) {
   rename.className = "g-rename";
   rename.textContent = "✎";
   rename.setAttribute("role", "button");
-  rename.title = "Rename group";
+  rename.title = t("spRenameGroup");
   rename.addEventListener("click", (e) => {
     e.stopPropagation();
     startRename(group, name);
@@ -699,7 +702,7 @@ function buildGroup(group) {
 
   const restore = document.createElement("span");
   restore.className = "g-restore";
-  restore.textContent = isActive ? "Reopen" : "Open all";
+  restore.textContent = isActive ? t("spReopen") : t("spOpenAll");
   restore.setAttribute("role", "button");
   restore.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -715,7 +718,7 @@ function buildGroup(group) {
       switch: true,
       windowId,
     });
-    toast(`Switching to "${group.name}"…`);
+    toast(t("spSwitchingTo", group.name));
   });
 
   // Delete the whole group straight from the header — no need to expand it.
@@ -723,13 +726,13 @@ function buildGroup(group) {
   del.className = "g-del";
   del.textContent = "×";
   del.setAttribute("role", "button");
-  del.title = "Delete group";
-  del.setAttribute("aria-label", `Delete group "${group.name}"`);
+  del.title = t("deleteGroup");
+  del.setAttribute("aria-label", t("deleteGroupNamed", group.name));
   del.addEventListener("click", async (e) => {
     e.stopPropagation();
     expanded.delete(group.id);
     await removeGroup(group.id);
-    toast(`Deleted "${group.name}".`);
+    toast(t("deletedNamed", group.name));
     reload();
   });
 
@@ -769,7 +772,7 @@ function buildGroup(group) {
     if (group.tabs.length === 0) {
       const e = document.createElement("div");
       e.className = "g-body-empty";
-      e.textContent = "No tabs yet.";
+      e.textContent = t("spNoTabsYet");
       body.append(e);
     } else {
       const ul = document.createElement("ul");
@@ -781,7 +784,7 @@ function buildGroup(group) {
     const add = document.createElement("button");
     add.className = "add-tab-btn";
     add.type = "button";
-    add.textContent = "+ Add current tab";
+    add.textContent = t("spAddCurrentTab");
     add.addEventListener("click", () => addCurrentTab(group.id));
     body.append(add);
 
@@ -885,10 +888,18 @@ function cleanupDrag() {
 
 saveWindowBtn.addEventListener("click", async () => {
   saveWindowBtn.disabled = true;
-  const res = await send({ type: "SAVE_CURRENT_WINDOW", payload: {} });
+  const windowId = await ensurePanelWindowId();
+  const res = await send({ type: "SAVE_CURRENT_WINDOW", payload: { windowId } });
   saveWindowBtn.disabled = false;
   if (res?.group) expanded.add(res.group.id);
-  toast("Saved this window.");
+  if (res?.status === "duplicate") {
+    // Same set of pages already saved — point at it instead of duplicating.
+    toast(t("alreadySaved", res.group.name));
+  } else if (res?.ok) {
+    toast(t("spSavedWindow"));
+  } else {
+    toast(t("spNothingToSave"));
+  }
   reload();
 });
 
@@ -899,25 +910,28 @@ saveGroupBtn.addEventListener("click", async () => {
   if (res?.status === "duplicate") {
     // Already saved (same name + same tabs) — surface it instead of duplicating.
     expanded.add(res.group.id);
-    toast(`"${res.group.name}" is already saved.`);
+    toast(t("alreadySaved", res.group.name));
     reload();
   } else if (res?.ok) {
     expanded.add(res.group.id);
-    toast(`Saved group "${res.group.name}".`);
+    toast(t("spSavedGroup", res.group.name));
     reload();
   } else {
-    toast("Active tab isn't in a group.");
+    toast(t("spNotInGroup"));
   }
 });
 
 newGroupBtn.addEventListener("click", async () => {
-  const g = await addEmptyGroup({ name: "New group" });
+  const g = await addEmptyGroup({ name: t("newGroupName") });
   expanded.add(g.id);
-  toast("Created a new group.");
+  toast(t("spCreatedGroup"));
   reload();
 });
 
 editorBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+aboutBtn.addEventListener("click", () =>
+  chrome.tabs.create({ url: chrome.runtime.getURL("src/about/about.html") }),
+);
 
 // Keep the panel live: re-render when groups change (saves, edits in the editor,
 // sync updates from another device, the active-workspace map, or the live-sync
@@ -967,6 +981,9 @@ async function initDockHint() {
  * ------------------------------------------------------------------ */
 
 async function init() {
+  await initI18n();
+  applyI18n();
+  reloadOnLanguageChange();
   // Resolve the host window up front so the active-workspace badge and the
   // "Open all" switch always have a concrete window id to work with.
   await ensurePanelWindowId();

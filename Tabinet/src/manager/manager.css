@@ -609,3 +609,21 @@ body {
   font-weight: 500;
   box-shadow: var(--shadow-md);
 }
+
+/* ---- language picker + version link (sidebar footer) ---- */
+.lang-label {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.about-link {
+  color: var(--muted);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.about-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
